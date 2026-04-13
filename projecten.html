@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Projecten & Portfolio | LYNK 3D Solutions</title>
+    <meta name="description" content="Bekijk onze 3D-print projecten: custom ontwerpen, prototypes en producten. Van bathroom organizers tot survival kits. LYNK 3D Solutions, Apeldoorn.">
+    <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .project-card { border-radius: 12px; overflow: hidden; background: var(--white); border: 1px solid var(--border); transition: all 0.3s ease; }
+        .project-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.08); border-color: transparent; }
+        .project-card img { width: 100%; height: 280px; object-fit: cover; }
+        .project-card-body { padding: 24px; }
+        .project-card-body h3 { margin-bottom: 8px; font-size: 1.1rem; }
+        .project-card-body p { color: var(--gray-dark); font-size: 0.85rem; margin-bottom: 12px; }
+        .project-tag { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; background: rgba(32,67,62,0.08); color: var(--teal); margin-right: 4px; margin-bottom: 4px; }
+        .projects-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 24px; }
+        @media (max-width: 768px) {
+            .projects-grid { grid-template-columns: 1fr !important; gap: 16px; }
+            .project-card img { height: 200px; }
+            .project-card-body { padding: 16px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <div class="container header-inner">
+            <a href="index.html" class="logo"><img src="img/logo.jpg" alt="LYNK 3D Solutions"><span class="logo-text">LYNK 3D Solutions</span><span style="font-size: 0.6rem; color: var(--gray-mid); display: block; margin-top: -2px; font-weight: 400;">onderdeel van CVL Solutions</span></a>
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="index.html#diensten">Diensten</a>
+                <a href="materialen.html">Materialen</a>
+                <a href="werkwijze.html">Werkwijze</a>
+                <a href="projecten.html" class="active">Projecten</a>
+                <a href="https://www.etsy.com/shop/LYNKYUWANA" target="_blank" rel="noopener">Shop</a>
+                <a href="contact.html" class="btn btn-teal btn-sm nav-cta">Contact</a>
+            </nav>
+            <button class="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+        </div>
+        <div class="mobile-menu">
+            <a href="index.html">Home</a>
+            <a href="index.html#diensten">Diensten</a>
+            <a href="materialen.html">Materialen</a>
+            <a href="werkwijze.html">Werkwijze</a>
+            <a href="projecten.html">Projecten</a>
+            <a href="https://www.etsy.com/shop/LYNKYUWANA" target="_blank" rel="noopener">Shop (Etsy)</a>
+            <a href="contact.html">Contact</a>
+        </div>
+    </header>
+
+    <section class="page-header">
+        <div class="container">
+            <span class="section-label" style="color: rgba(255,255,255,0.5);">Portfolio</span>
+            <h1>Onze <span style="color: var(--orange);">projecten</span></h1>
+            <p>Een greep uit wat wij maken. Van custom ontwerpen in Fusion 360 tot productieklare prints. Elk project begint met een idee.</p>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="container">
+            <div class="projects-grid stagger-children">
+
+                <div class="project-card">
+                    <img src="img/product-organizer.png" alt="AERA Bathroom Organizer" loading="lazy">
+                    <div class="project-card-body">
+                        <h3>AERA Bathroom Organizer</h3>
+                        <p>Minimalistische badkamer organizer met ruimte voor wattenschijfjes, wattenstaafjes en accessoires. Ontworpen in Fusion 360 met een organisch ribbelpatroon.</p>
+                        <div><span class="project-tag">Custom ontwerp</span><span class="project-tag">PLA</span><span class="project-tag">Badkamer</span></div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <img src="img/project-skull.png" alt="Ancient Skull Pen Holder" loading="lazy">
+                    <div class="project-card-body">
+                        <h3>Ancient Skull Pen Holder</h3>
+                        <p>Decoratieve pennenhouder in de vorm van een antiek schedel. Een uniek bureauaccessoire dat functionaliteit combineert met karakter.</p>
+                        <div><span class="project-tag">Decoratief</span><span class="project-tag">PLA</span><span class="project-tag">Bureau</span></div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <img src="img/project-puffa.png" alt="Puffa Desk Organizer" loading="lazy">
+                    <div class="project-card-body">
+                        <h3>Puffa Desk Organizer</h3>
+                        <p>Puffa jacket-geïnspireerde bureauorganizer. Een speelse twist op de klassieke pennenhouder met een streetwear-uitstraling.</p>
+                        <div><span class="project-tag">Custom ontwerp</span><span class="project-tag">PLA</span><span class="project-tag">Bureau</span></div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <img src="img/project-mario.png" alt="Mario Mystery Box Toilet Paper Holder" loading="lazy">
+                    <div class="project-card-body">
+                        <h3>Mario Mystery Box Toilet Paper Holder</h3>
+                        <p>Toiletrolhouder in de vorm van de iconische Mario Mystery Box. Een grappig en functioneel cadeau voor gamers.</p>
+                        <div><span class="project-tag">Gaming</span><span class="project-tag">PLA</span><span class="project-tag">Cadeau</span></div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <img src="img/project-milwaukee.png" alt="Milwaukee AirPod Pro Case" loading="lazy">
+                    <div class="project-card-body">
+                        <h3>Milwaukee AirPod Pro Case</h3>
+                        <p>AirPod Pro beschermhoes in Milwaukee-stijl. Voor de echte vakman die ook op de bouwplaats z'n oortjes beschermd wil houden.</p>
+                        <div><span class="project-tag">Accessoire</span><span class="project-tag">TPU</span><span class="project-tag">Bouw</span></div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <img src="img/project-embercore.png" alt="EmberCore Survival Fire Kit" loading="lazy">
+                    <div class="project-card-body">
+                        <h3>EmberCore Survival Fire Kit</h3>
+                        <p>Compact survival fire kit met geïntegreerde opslag voor lucifers en tondel. Ontworpen voor outdoor en bushcraft enthousiastelingen.</p>
+                        <div><span class="project-tag">Outdoor</span><span class="project-tag">PETG</span><span class="project-tag">Functioneel</span></div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <img src="img/project-keyholder.png" alt="Modern Key Holder & Planter Dish" loading="lazy">
+                    <div class="project-card-body">
+                        <h3>Modern Key Holder & Planter Dish</h3>
+                        <p>Minimalistische sleutelhouder met geïntegreerd plantenbakje. Het perfecte entree-accessoire dat orde en groen combineert.</p>
+                        <div><span class="project-tag">Interieur</span><span class="project-tag">PLA</span><span class="project-tag">Minimalistisch</span></div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <img src="img/project-norflake.png" alt="NORFLAKE Tealight Holder" loading="lazy">
+                    <div class="project-card-body">
+                        <h3>NORFLAKE Tealight Holder</h3>
+                        <p>Scandinavisch geïnspireerde theelichthouder met sneeuwvlok-patroon. Creëert een sfeervolle lichtval in elke ruimte.</p>
+                        <div><span class="project-tag">Decoratief</span><span class="project-tag">PLA</span><span class="project-tag">Sfeer</span></div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <img src="img/project-handwrap.png" alt="Handwrap Roller" loading="lazy">
+                    <div class="project-card-body">
+                        <h3>Handwrap Roller</h3>
+                        <p>Handig hulpmiddel om boksbandages strak op te rollen. Ontworpen voor boksers en martial arts beoefenaars.</p>
+                        <div><span class="project-tag">Sport</span><span class="project-tag">PLA</span><span class="project-tag">Functioneel</span></div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <img src="img/product-batteryholder.png" alt="DeWalt Battery Holder" loading="lazy">
+                    <div class="project-card-body">
+                        <h3>DeWalt Battery Wall Mount</h3>
+                        <p>Wandhouder voor DeWalt accu's. Houd je werkplaats georganiseerd met deze stevige, op maat gemaakte houder.</p>
+                        <div><span class="project-tag">Gereedschap</span><span class="project-tag">PETG</span><span class="project-tag">Werkplaats</span></div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <img src="img/product-keychain.png" alt="LYNK Custom Keychain" loading="lazy">
+                    <div class="project-card-body">
+                        <h3>LYNK Custom Keychain</h3>
+                        <p>Op maat gemaakte sleutelhanger met logo of tekst. Ideaal als relatiegeschenk of persoonlijk accessoire.</p>
+                        <div><span class="project-tag">Relatiegeschenk</span><span class="project-tag">PLA</span><span class="project-tag">Custom</span></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <div class="container reveal">
+            <h2>Heeft u ook een idee?</h2>
+            <p>Van concept tot eindproduct. Vertel ons wat u nodig heeft en wij maken het werkelijkheid.</p>
+            <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                <a href="mailto:info@cvlsolutions.nl?subject=Offerte%20aanvraag%20-%20LYNK%203D%20Solutions&body=Naam:%0AEmail:%0ATelefoon:%0ABedrijf%20(optioneel):%0A%0AOmschrijving%20project:%0AAantal%20stuks:%0AGewenste%20materiaal:%0AGewenste%20levertijd:" class="btn btn-orange">Offerte aanvragen</a>
+                <a href="https://wa.me/31613277621?text=Goedendag%2C%20ik%20wil%20graag%20een%203D-print%20laten%20maken%20via%20LYNK%203D%20Solutions." class="btn btn-outline-white">WhatsApp ons</a>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <div class="logo-text">LYNK 3D Solutions</div>
+                    <p>Professionele 3D-printservice in Apeldoorn en Amersfoort. Van idee tot eindproduct. Onderdeel van CVL Solutions.</p>
+                </div>
+                <div>
+                    <h4>Pagina's</h4>
+                    <div class="footer-links">
+                        <a href="index.html">Home</a>
+                        <a href="materialen.html">Materialen</a>
+                        <a href="werkwijze.html">Werkwijze</a>
+                        <a href="projecten.html">Projecten</a>
+                        <a href="https://www.etsy.com/shop/LYNKYUWANA" target="_blank" rel="noopener">Shop (Etsy)</a>
+                    </div>
+                </div>
+                <div>
+                    <h4>Contact</h4>
+                    <div class="footer-links">
+                        <a href="https://wa.me/31613277621">06 1327 7621 (WhatsApp)</a>
+                        <a href="mailto:info@cvlsolutions.nl">info@cvlsolutions.nl</a>
+                        <a>Kantoor: Databankweg 26, Amersfoort</a>
+                        <a>Productie: Robijnstraat, 7314 JA Apeldoorn</a>
+                        <a href="https://www.cvlsolutions.nl" target="_blank" rel="noopener">CVL Solutions</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>&copy; 2026 LYNK 3D Solutions - onderdeel van CVL Solutions</span>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
