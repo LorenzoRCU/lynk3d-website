@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Offerte Aanvragen | LYNK 3D Solutions</title>
+    <meta name="description" content="Vraag een vrijblijvende offerte aan voor uw 3D-print project. Custom ontwerp, prototype of kleine serie. LYNK 3D Solutions, Apeldoorn.">
+    <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .offerte-section { padding: 140px 0 80px; background: var(--gray-light); min-height: 100vh; }
+        .offerte-card { background: var(--white); border-radius: 16px; padding: 48px; max-width: 650px; margin: 0 auto; box-shadow: 0 16px 48px rgba(0,0,0,0.08); border: 1px solid var(--border); }
+        .offerte-card h2 { text-align: center; margin-bottom: 8px; }
+        .offerte-card .subtitle { text-align: center; color: var(--gray-mid); margin-bottom: 32px; }
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 4px; color: var(--black); }
+        .form-group label .required { color: #FF3B30; }
+        .form-group label .optional { color: var(--gray-mid); font-weight: 400; font-size: 0.8rem; }
+        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--font-body); font-size: 0.95rem; transition: border-color var(--transition), box-shadow var(--transition); box-sizing: border-box; }
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(32,67,62,0.1); }
+        .form-group textarea { resize: vertical; min-height: 100px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .form-divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+        .form-section-title { font-family: var(--font-heading); font-size: 0.95rem; font-weight: 600; color: var(--teal); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; }
+        .success-msg { display: none; text-align: center; padding: 40px 20px; }
+        .success-msg h2 { color: var(--teal); margin-bottom: 12px; }
+        .error-msg { display: none; background: rgba(255,59,48,0.1); color: #FF3B30; padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 16px; }
+        @media (max-width: 640px) { .offerte-card { padding: 24px 16px; } .form-row { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <div class="container header-inner">
+            <a href="index.html" class="logo"><img src="img/logo.jpg" alt="LYNK 3D Solutions"><span class="logo-text">LYNK 3D Solutions</span><span style="font-size: 0.6rem; color: var(--gray-mid); display: block; margin-top: -2px; font-weight: 400;">onderdeel van CVL Solutions</span></a>
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="index.html#diensten">Diensten</a>
+                <a href="materialen.html">Materialen</a>
+                <a href="werkwijze.html">Werkwijze</a>
+                <a href="projecten.html">Projecten</a>
+                <a href="https://www.etsy.com/shop/LYNKYUWANA" target="_blank" rel="noopener">Shop</a>
+                <a href="contact.html" class="btn btn-teal btn-sm nav-cta">Contact</a>
+            </nav>
+            <button class="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+        </div>
+        <div class="mobile-menu">
+            <a href="index.html">Home</a>
+            <a href="index.html#diensten">Diensten</a>
+            <a href="materialen.html">Materialen</a>
+            <a href="werkwijze.html">Werkwijze</a>
+            <a href="projecten.html">Projecten</a>
+            <a href="https://www.etsy.com/shop/LYNKYUWANA" target="_blank" rel="noopener">Shop (Etsy)</a>
+            <a href="contact.html">Contact</a>
+        </div>
+    </header>
+
+    <section class="offerte-section">
+        <div class="container">
+
+            <div class="offerte-card" id="offerteForm">
+                <h2>Offerte aanvragen</h2>
+                <p class="subtitle">Vul het formulier in en ontvang een vrijblijvende offerte per e-mail.</p>
+
+                <div class="error-msg" id="errorMsg"></div>
+
+                <form onsubmit="handleOfferte(event)">
+                    <div class="form-section-title">Uw gegevens</div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Naam <span class="required">*</span></label>
+                            <input type="text" id="naam" required placeholder="Uw volledige naam">
+                        </div>
+                        <div class="form-group">
+                            <label>E-mailadres <span class="required">*</span></label>
+                            <input type="email" id="email" required placeholder="uw@email.nl">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Telefoon</label>
+                            <input type="tel" id="telefoon" placeholder="06 1234 5678">
+                        </div>
+                        <div class="form-group">
+                            <label>Bedrijf <span class="optional">(optioneel)</span></label>
+                            <input type="text" id="bedrijf" placeholder="Bedrijfsnaam">
+                        </div>
+                    </div>
+
+                    <hr class="form-divider">
+                    <div class="form-section-title">Uw project</div>
+
+                    <div class="form-group">
+                        <label>Omschrijving van uw project <span class="required">*</span></label>
+                        <textarea id="omschrijving" required placeholder="Beschrijf wat u wilt laten maken. Hoe gedetailleerder, hoe beter wij u kunnen helpen."></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Aantal stuks <span class="required">*</span></label>
+                            <select id="aantal" required>
+                                <option value="">Selecteer</option>
+                                <option value="1">1 stuk (prototype)</option>
+                                <option value="2-5">2 - 5 stuks</option>
+                                <option value="5-10">5 - 10 stuks</option>
+                                <option value="10-25">10 - 25 stuks</option>
+                                <option value="25-50">25 - 50 stuks</option>
+                                <option value="50+">50+ stuks</option>
+                                <option value="onbekend">Nog onbekend</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Gewenst materiaal</label>
+                            <select id="materiaal">
+                                <option value="">Selecteer of laat adviseren</option>
+                                <option value="PLA">PLA (standaard, breed kleurenpalet)</option>
+                                <option value="PETG">PETG (sterk, temperatuurbestendig)</option>
+                                <option value="ABS">ABS (industrieel, hittebestendig)</option>
+                                <option value="TPU">TPU (flexibel, schokbestendig)</option>
+                                <option value="Nylon">Nylon (extreem sterk)</option>
+                                <option value="Silk">Silk (decoratief, zijdeglans)</option>
+                                <option value="Wood">Wood fill (houtlook)</option>
+                                <option value="Anders">Anders / Weet ik niet</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Gewenste levertijd</label>
+                            <select id="levertijd">
+                                <option value="">Selecteer</option>
+                                <option value="1-3 dagen">Spoed: 1-3 werkdagen</option>
+                                <option value="3-7 dagen">Standaard: 3-7 werkdagen</option>
+                                <option value="1-2 weken">Rustig: 1-2 weken</option>
+                                <option value="Geen haast">Geen haast</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Heeft u al een 3D-bestand?</label>
+                            <select id="bestand">
+                                <option value="Nee">Nee, ik heb ontwerp nodig</option>
+                                <option value="Ja, STL">Ja, ik heb een STL bestand</option>
+                                <option value="Ja, STEP">Ja, ik heb een STEP bestand</option>
+                                <option value="Ja, anders">Ja, ander formaat</option>
+                                <option value="Schets">Ik heb een schets/foto</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Aanvullende opmerkingen <span class="optional">(optioneel)</span></label>
+                        <textarea id="opmerkingen" placeholder="Specifieke kleuren, afmetingen, afwerking of andere wensen..." style="min-height: 70px;"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-orange" style="width: 100%; justify-content: center; margin-top: 8px; font-size: 1rem; padding: 16px;">
+                        Offerte aanvragen
+                    </button>
+
+                    <p style="text-align: center; font-size: 0.8rem; color: var(--gray-mid); margin-top: 16px;">
+                        Wij reageren binnen 1 werkdag op uw aanvraag.
+                    </p>
+                </form>
+            </div>
+
+            <div class="offerte-card success-msg" id="successMsg">
+                <div style="font-size: 3rem; margin-bottom: 16px;">&#10003;</div>
+                <h2>Offerte aanvraag verzonden!</h2>
+                <p>Bedankt voor uw aanvraag. Wij nemen binnen 1 werkdag contact met u op via het opgegeven e-mailadres.</p>
+                <div style="background: var(--teal-bg); border-radius: 10px; padding: 20px; margin-top: 24px; text-align: left;">
+                    <h4 style="color: var(--teal); margin-bottom: 8px;">Wat nu?</h4>
+                    <ul style="padding-left: 20px;">
+                        <li style="margin-bottom: 6px; color: var(--gray-dark); list-style: disc;">Check uw inbox voor een bevestiging</li>
+                        <li style="margin-bottom: 6px; color: var(--gray-dark); list-style: disc;">Wij analyseren uw project en stellen een offerte op</li>
+                        <li style="margin-bottom: 6px; color: var(--gray-dark); list-style: disc;">U ontvangt de offerte per e-mail</li>
+                        <li style="color: var(--gray-dark); list-style: disc;">Na akkoord starten wij direct met productie</li>
+                    </ul>
+                </div>
+                <a href="index.html" class="btn btn-outline" style="margin-top: 24px;">Terug naar home</a>
+            </div>
+
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <div class="logo-text">LYNK 3D Solutions</div>
+                    <p>Professionele 3D-printservice in Apeldoorn en Amersfoort. Van idee tot eindproduct. Onderdeel van CVL Solutions.</p>
+                </div>
+                <div>
+                    <h4>Pagina's</h4>
+                    <div class="footer-links">
+                        <a href="index.html">Home</a>
+                        <a href="materialen.html">Materialen</a>
+                        <a href="werkwijze.html">Werkwijze</a>
+                        <a href="projecten.html">Projecten</a>
+                    </div>
+                </div>
+                <div>
+                    <h4>Contact</h4>
+                    <div class="footer-links">
+                        <a href="https://wa.me/31613277621">06 1327 7621 (WhatsApp)</a>
+                        <a href="mailto:info@cvlsolutions.nl">info@cvlsolutions.nl</a>
+                        <a>Kantoor: Databankweg 26, Amersfoort</a>
+                        <a>Productie: Robijnstraat, 7314 JA Apeldoorn</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>&copy; 2026 LYNK 3D Solutions - onderdeel van CVL Solutions</span>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+    <script>
+    function handleOfferte(e) {
+        e.preventDefault();
+        const naam = document.getElementById('naam').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const telefoon = document.getElementById('telefoon').value.trim();
+        const bedrijf = document.getElementById('bedrijf').value.trim();
+        const omschrijving = document.getElementById('omschrijving').value.trim();
+        const aantal = document.getElementById('aantal').value;
+        const materiaal = document.getElementById('materiaal').value;
+        const levertijd = document.getElementById('levertijd').value;
+        const bestand = document.getElementById('bestand').value;
+        const opmerkingen = document.getElementById('opmerkingen').value.trim();
+
+        if (!naam || !email || !omschrijving || !aantal) {
+            document.getElementById('errorMsg').textContent = 'Vul alle verplichte velden in.';
+            document.getElementById('errorMsg').style.display = 'block';
+            return;
+        }
+
+        const subject = encodeURIComponent('Offerte aanvraag - LYNK 3D Solutions');
+        const body = encodeURIComponent(
+            `OFFERTE AANVRAAG - LYNK 3D SOLUTIONS\n` +
+            `${'='.repeat(40)}\n\n` +
+            `GEGEVENS\n` +
+            `Naam: ${naam}\n` +
+            `E-mail: ${email}\n` +
+            `Telefoon: ${telefoon || 'Niet opgegeven'}\n` +
+            `Bedrijf: ${bedrijf || 'Particulier'}\n\n` +
+            `PROJECT\n` +
+            `Omschrijving: ${omschrijving}\n` +
+            `Aantal stuks: ${aantal}\n` +
+            `Gewenst materiaal: ${materiaal || 'Advies gewenst'}\n` +
+            `Gewenste levertijd: ${levertijd || 'Niet opgegeven'}\n` +
+            `3D-bestand: ${bestand}\n\n` +
+            `Aanvullende opmerkingen: ${opmerkingen || 'Geen'}\n\n` +
+            `${'='.repeat(40)}\n` +
+            `Verzonden via lynk3d.netlify.app`
+        );
+
+        window.location.href = `mailto:info@cvlsolutions.nl?subject=${subject}&body=${body}`;
+
+        document.getElementById('offerteForm').style.display = 'none';
+        document.getElementById('successMsg').style.display = 'block';
+    }
+    </script>
+</body>
+</html>
