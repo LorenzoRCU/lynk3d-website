@@ -96,7 +96,9 @@ async function submitOrder() {
         return;
     }
 
-    const name = document.getElementById('oName').value.trim();
+    const firstName = document.getElementById('oFirstName').value.trim();
+    const lastName = document.getElementById('oLastName').value.trim();
+    const name = `${firstName} ${lastName}`.trim();
     const email = document.getElementById('oEmail').value.trim();
     const phone = document.getElementById('oPhone').value.trim();
     const street = document.getElementById('oStreet').value.trim();
@@ -106,7 +108,7 @@ async function submitOrder() {
     const notes = document.getElementById('oNotes').value.trim();
     const terms = document.getElementById('oTerms').checked;
 
-    if (!name || !email || !street || !zip || !city) { showModalWarn('Vul alle verplichte velden in.'); return; }
+    if (!firstName || !lastName || !email || !street || !zip || !city) { showModalWarn('Vul alle verplichte velden in.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showModalWarn('Vul een geldig e-mailadres in.'); return; }
     if (!terms) { showModalWarn('Ga akkoord met de voorwaarden om verder te gaan.'); return; }
 
@@ -123,7 +125,7 @@ async function submitOrder() {
                 material: activeProduct.material,
                 unitPrice: activeProduct.price,
             },
-            customer: { name, email, phone, street, zip, city, country, notes },
+            customer: { firstName, lastName, name, email, phone, street, zip, city, country, notes },
             config: { color, quantity: qty, customText },
             price: { totalIncVat, unitPrice: activeProduct.price, quantity: qty },
         };

@@ -175,10 +175,17 @@ async function sendOrderEmail(order, stlBase64) {
                <b>Betaald op:</b> ${new Date(order.paidAt).toLocaleString('nl-NL')}<br>
                <b>Mollie payment:</b> ${order.molliePaymentId}</p>
 
-            <h3 style="color: #20433e;">Klant</h3>
-            <p>${esc(c.name)}<br>${esc(c.email)}${c.phone ? '<br>' + esc(c.phone) : ''}<br>
-               ${esc(c.street)}<br>${esc(c.zip)} ${esc(c.city)}<br>${esc(c.country)}</p>
-            ${c.notes ? `<p><b>Opmerkingen:</b> ${esc(c.notes)}</p>` : ''}
+            <h3 style="color: #20433e;">Verzendadres</h3>
+            <table style="border-collapse: collapse;">
+                <tr><td><b>Voornaam</b></td><td>${esc(c.firstName || firstName(c))}</td></tr>
+                <tr><td><b>Achternaam</b></td><td>${esc(c.lastName || '')}</td></tr>
+                <tr><td><b>Straat</b></td><td>${esc(c.street)}</td></tr>
+                <tr><td><b>Postcode / Plaats</b></td><td>${esc(c.zip)} ${esc(c.city)}</td></tr>
+                <tr><td><b>Land</b></td><td>${esc(c.country)}</td></tr>
+                <tr><td><b>E-mail</b></td><td>${esc(c.email)}</td></tr>
+                ${c.phone ? `<tr><td><b>Telefoon</b></td><td>${esc(c.phone)}</td></tr>` : ''}
+            </table>
+            ${c.notes ? `<p style="margin-top: 12px;"><b>Opmerkingen:</b> ${esc(c.notes)}</p>` : ''}
 
             <h3 style="color: #20433e;">Print</h3>
             <table style="border-collapse: collapse; width: 100%;">
@@ -230,7 +237,7 @@ async function sendOrderEmail(order, stlBase64) {
         htmlBody,
         {
             to: recipient,
-            replyTo: { address: c.email, name: c.name },
+            replyTo: { address: c.email, name: fullName(c) },
             attachments,
         },
     );
@@ -239,7 +246,7 @@ async function sendOrderEmail(order, stlBase64) {
     try {
         const customerHtml = `
             <div style="font-family: Arial, sans-serif; color: #1C1C1E;">
-                <h2 style="color: #20433e;">Bedankt voor je bestelling, ${esc(c.name.split(' ')[0])}!</h2>
+                <h2 style="color: #20433e;">Bedankt voor je bestelling, ${esc(firstName(c))}!</h2>
                 <p>We hebben je betaling ontvangen en starten met produceren.</p>
                 <p><b>Ordernummer:</b> ${order.orderId}<br>
                    <b>Bestand:</b> ${esc(order.stl.filename)}<br>
@@ -264,6 +271,16 @@ async function sendOrderEmail(order, stlBase64) {
 
 function esc(s) {
     return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+// Customer name helpers — new orders have firstName + lastName; old orders only have .name.
+function fullName(c) {
+    if (c.firstName || c.lastName) return `${c.firstName || ''} ${c.lastName || ''}`.trim();
+    return c.name || '';
+}
+function firstName(c) {
+    if (c.firstName) return c.firstName;
+    return (c.name || '').split(' ')[0] || '';
 }
 
 // ---------- Telegram push notification ----------
@@ -292,7 +309,7 @@ async function sendTelegramAlert(order) {
             ``,
             `💰 *${eur(p.totalIncVat)}* incl BTW`,
             ``,
-            `👤 ${escMd(c.name)}`,
+            `👤 ${escMd(fullName(c))}`,
             `${escMd(c.street)}, ${escMd(c.zip)} ${escMd(c.city)} (${escMd(c.country)})`,
             `📧 ${escMd(c.email)}${c.phone ? ' · 📱 ' + escMd(c.phone) : ''}`,
             ``,
@@ -312,7 +329,7 @@ async function sendTelegramAlert(order) {
             ``,
             `💰 *${eur(p.totalIncVat)}* incl BTW`,
             ``,
-            `👤 ${escMd(c.name)}`,
+            `👤 ${escMd(fullName(c))}`,
             `${escMd(c.street)}, ${escMd(c.zip)} ${escMd(c.city)} (${escMd(c.country)})`,
             `📧 ${escMd(c.email)}${c.phone ? ' · 📱 ' + escMd(c.phone) : ''}`,
             ``,
@@ -372,10 +389,17 @@ async function sendProductOrderEmail(order) {
                 <tr><td><b>Totaal</b></td><td><b>${euro(p.totalIncVat)}</b></td></tr>
             </table>
 
-            <h3 style="color: #20433e;">Klant</h3>
-            <p>${esc(c.name)}<br>${esc(c.email)}${c.phone ? '<br>' + esc(c.phone) : ''}<br>
-               ${esc(c.street)}<br>${esc(c.zip)} ${esc(c.city)}<br>${esc(c.country)}</p>
-            ${c.notes ? `<p><b>Opmerkingen:</b> ${esc(c.notes)}</p>` : ''}
+            <h3 style="color: #20433e;">Verzendadres</h3>
+            <table style="border-collapse: collapse;">
+                <tr><td><b>Voornaam</b></td><td>${esc(c.firstName || firstName(c))}</td></tr>
+                <tr><td><b>Achternaam</b></td><td>${esc(c.lastName || '')}</td></tr>
+                <tr><td><b>Straat</b></td><td>${esc(c.street)}</td></tr>
+                <tr><td><b>Postcode / Plaats</b></td><td>${esc(c.zip)} ${esc(c.city)}</td></tr>
+                <tr><td><b>Land</b></td><td>${esc(c.country)}</td></tr>
+                <tr><td><b>E-mail</b></td><td>${esc(c.email)}</td></tr>
+                ${c.phone ? `<tr><td><b>Telefoon</b></td><td>${esc(c.phone)}</td></tr>` : ''}
+            </table>
+            ${c.notes ? `<p style="margin-top: 12px;"><b>Opmerkingen:</b> ${esc(c.notes)}</p>` : ''}
 
             <p style="margin-top: 24px; color: #8E8E93; font-size: 0.85em;">
                 Deze order is direct betaald via Mollie. Start productie binnen 24 uur.
@@ -388,7 +412,7 @@ async function sendProductOrderEmail(order) {
         adminHtml,
         {
             to: recipient,
-            replyTo: { address: c.email, name: c.name },
+            replyTo: { address: c.email, name: fullName(c) },
         },
     );
 
@@ -396,7 +420,7 @@ async function sendProductOrderEmail(order) {
     try {
         const customerHtml = `
             <div style="font-family: Arial, sans-serif; color: #1C1C1E;">
-                <h2 style="color: #20433e;">Bedankt voor je bestelling, ${esc(c.name.split(' ')[0])}!</h2>
+                <h2 style="color: #20433e;">Bedankt voor je bestelling, ${esc(firstName(c))}!</h2>
                 <p>We hebben je betaling ontvangen en starten met produceren.</p>
                 <p><b>Ordernummer:</b> ${order.orderId}<br>
                    <b>Product:</b> ${esc(prod.name)}<br>

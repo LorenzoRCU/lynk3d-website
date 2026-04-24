@@ -306,11 +306,13 @@
                 <div class="warn" id="modalWarn"></div>
 
                 <div class="form-row">
-                    <div><label>Naam <span class="req">*</span></label><input type="text" id="oName" placeholder="Voor- en achternaam" required></div>
+                    <div><label>Voornaam <span class="req">*</span></label><input type="text" id="oFirstName" placeholder="Voornaam" required></div>
+                    <div><label>Achternaam <span class="req">*</span></label><input type="text" id="oLastName" placeholder="Achternaam" required></div>
+                </div>
+                <div class="form-row">
+                    <div><label>E-mail <span class="req">*</span></label><input type="email" id="oEmail" placeholder="jouw@email.nl" required></div>
                     <div><label>Telefoon</label><input type="tel" id="oPhone" placeholder="06 1234 5678"></div>
                 </div>
-                <label>E-mail <span class="req">*</span></label>
-                <input type="email" id="oEmail" placeholder="jouw@email.nl" required>
 
                 <div class="form-row">
                     <div style="grid-column: 1 / -1;"><label>Straat + huisnr <span class="req">*</span></label><input type="text" id="oStreet" placeholder="Voorbeeldstraat 123" required></div>
@@ -374,6 +376,6 @@
     </footer>
 
     <script src="js/main.js"></script>
-    <script type="module" src="js/calculator.js?v=5"></script>
+    <script type="module" src="js/calculator.js?v=6"></script>
 </body>
 </html>
