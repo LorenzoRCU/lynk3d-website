@@ -1,2 +1,11 @@
 # Local Netlify folder
 .netlify
+node_modules/
+.DS_Store
+*.log
+deno.lock
+
+# Environment / secrets — NEVER commit
+.env
+.env.local
+.env.*.local

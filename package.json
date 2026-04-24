@@ -1,0 +1,11 @@
+{
+  "name": "lynk3d-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LYNK 3D Solutions website — static site with Netlify Functions for STL orders",
+  "type": "module",
+  "dependencies": {
+    "@mollie/api-client": "^4.5.0",
+    "@netlify/blobs": "^8.1.0"
+  }
+}

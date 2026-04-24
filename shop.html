@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Shop | LYNK 3D Solutions</title>
+    <meta name="description" content="Direct bestellen uit de LYNK 3D collectie. Gratis verzending binnen de EU. Veilig afrekenen via iDEAL, creditcard en meer.">
+    <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .shop-section { padding: 120px 0 60px; background: var(--gray-light); min-height: 100vh; }
+        .shop-intro { text-align: center; max-width: 720px; margin: 0 auto 48px; }
+        .shop-intro h1 { margin-bottom: 16px; }
+        .shop-intro p { color: var(--gray-dark); font-size: 1.05rem; }
+        .shop-badges { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
+        .shop-badge { display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--teal); background: var(--teal-bg); padding: 8px 16px; border-radius: 100px; font-weight: 600; }
+        .shop-badge svg { width: 16px; height: 16px; }
+
+        .shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 24px; max-width: 1200px; margin: 0 auto; }
+
+        .product-card { background: var(--white); border-radius: 14px; border: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; transition: all var(--transition); cursor: pointer; }
+        .product-card:hover { transform: translateY(-4px); box-shadow: 0 16px 48px rgba(0,0,0,0.08); border-color: transparent; }
+        .product-card .image { aspect-ratio: 1; overflow: hidden; background: var(--gray-light); }
+        .product-card .image img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s ease; }
+        .product-card:hover .image img { transform: scale(1.04); }
+        .product-card .body { padding: 18px 20px 22px; display: flex; flex-direction: column; flex-grow: 1; }
+        .product-card h3 { font-size: 1.05rem; margin-bottom: 4px; color: var(--black); }
+        .product-card .subtitle { font-size: 0.82rem; color: var(--gray-mid); margin-bottom: 14px; line-height: 1.45; flex-grow: 1; }
+        .product-card .price-row { display: flex; align-items: center; justify-content: space-between; margin-top: auto; }
+        .product-card .price { font-family: var(--font-heading); font-weight: 700; font-size: 1.25rem; color: var(--teal); }
+        .product-card .price-meta { font-size: 0.72rem; color: var(--gray-mid); }
+        .product-card .buy-btn { background: var(--orange); color: var(--white); border: 0; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all var(--transition); }
+        .product-card .buy-btn:hover { background: #e68600; transform: translateY(-1px); }
+
+        /* Modal */
+        .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 2000; align-items: flex-start; justify-content: center; padding: 40px 20px; overflow-y: auto; }
+        .modal-bg.open { display: flex; }
+        .modal { background: var(--white); border-radius: 16px; max-width: 560px; width: 100%; padding: 32px; max-height: fit-content; }
+        .modal-close { position: absolute; top: 20px; right: 24px; background: none; border: 0; font-size: 1.5rem; cursor: pointer; color: var(--gray-mid); }
+        .modal .prod-head { display: grid; grid-template-columns: 140px 1fr; gap: 18px; margin-bottom: 24px; align-items: flex-start; }
+        .modal .prod-head img { width: 140px; height: 140px; object-fit: cover; border-radius: 10px; background: var(--gray-light); }
+        .modal h2 { font-size: 1.3rem; margin-bottom: 4px; }
+        .modal .prod-subtitle { color: var(--gray-mid); font-size: 0.85rem; margin-bottom: 8px; line-height: 1.45; }
+        .modal .prod-price { font-family: var(--font-heading); font-weight: 700; font-size: 1.6rem; color: var(--teal); }
+        .modal .prod-desc { color: var(--gray-dark); font-size: 0.9rem; margin-bottom: 18px; line-height: 1.55; }
+
+        .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+        .modal label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; color: var(--black); }
+        .modal label .req { color: #FF3B30; }
+        .modal input, .modal select, .modal textarea { width: 100%; padding: 11px 13px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--font-body); font-size: 0.95rem; box-sizing: border-box; }
+        .modal input:focus, .modal select:focus, .modal textarea:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(32,67,62,0.1); }
+        .modal textarea { resize: vertical; min-height: 60px; }
+        .modal-divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+        .modal .total { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 0; font-weight: 600; border-top: 1px solid var(--border); margin-top: 18px; }
+        .modal .total span:last-child { font-family: var(--font-heading); font-size: 1.4rem; color: var(--teal); }
+
+        .modal .checkbox { display: flex; align-items: flex-start; gap: 10px; font-size: 0.82rem; color: var(--gray-dark); margin: 14px 0 6px; cursor: pointer; }
+        .modal .checkbox input { width: auto; padding: 0; margin: 3px 0 0; }
+
+        .modal-buttons { display: flex; gap: 12px; margin-top: 18px; }
+        .modal-buttons .btn { flex: 1; justify-content: center; }
+
+        .loader { display: none; text-align: center; padding: 40px 20px; }
+        .loader.show { display: block; }
+        .spinner { border: 3px solid var(--gray-light); border-top-color: var(--teal); border-radius: 50%; width: 40px; height: 40px; margin: 0 auto 14px; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .warn { display: none; background: rgba(255,59,48,0.1); color: #9C1C14; padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 16px; border-left: 3px solid #FF3B30; }
+        .warn.show { display: block; }
+
+        @media (max-width: 600px) {
+            .modal { padding: 22px 18px; }
+            .modal .prod-head { grid-template-columns: 1fr; }
+            .modal .prod-head img { width: 100%; height: 200px; }
+            .field-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <div class="container header-inner">
+            <a href="index.html" class="logo"><img src="img/logo.jpg" alt="LYNK 3D Solutions"><span class="logo-text">LYNK 3D Solutions</span><span style="font-size: 0.6rem; color: var(--gray-mid); display: block; margin-top: -2px; font-weight: 400;">onderdeel van CVL Solutions</span></a>
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="calculator.html" style="color: var(--orange); font-weight: 700;">Calculator</a>
+                <a href="shop.html" class="active">Shop</a>
+                <a href="materialen.html">Materialen</a>
+                <a href="werkwijze.html">Werkwijze</a>
+                <a href="projecten.html">Projecten</a>
+                <a href="contact.html" class="btn btn-teal btn-sm nav-cta">Contact</a>
+            </nav>
+            <button class="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+        </div>
+        <div class="mobile-menu">
+            <a href="index.html">Home</a>
+            <a href="calculator.html" style="color: var(--orange); font-weight: 700;">Calculator — upload STL</a>
+            <a href="shop.html">Shop</a>
+            <a href="materialen.html">Materialen</a>
+            <a href="werkwijze.html">Werkwijze</a>
+            <a href="projecten.html">Projecten</a>
+            <a href="contact.html">Contact</a>
+        </div>
+    </header>
+
+    <section class="shop-section">
+        <div class="container">
+
+            <div class="shop-intro">
+                <span class="section-label">Onze collectie</span>
+                <h1>Direct te bestellen</h1>
+                <p>Een greep uit onze populairste 3D-prints. Kies je favoriet, bestel direct en wij printen en versturen het voor je.</p>
+                <div class="shop-badges">
+                    <span class="shop-badge">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                        Gratis verzending EU
+                    </span>
+                    <span class="shop-badge">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        Veilig betalen via Mollie
+                    </span>
+                    <span class="shop-badge">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        3-7 werkdagen levertijd
+                    </span>
+                </div>
+            </div>
+
+            <div class="shop-grid" id="shopGrid"></div>
+
+        </div>
+    </section>
+
+    <!-- Product modal -->
+    <div class="modal-bg" id="productModal">
+        <div class="modal" style="position: relative;" id="modalContent">
+            <button type="button" class="modal-close" id="modalClose" aria-label="Sluiten">&times;</button>
+
+            <div id="orderForm">
+                <div class="prod-head">
+                    <img id="mImage" src="" alt="">
+                    <div>
+                        <h2 id="mName">—</h2>
+                        <p class="prod-subtitle" id="mSubtitle">—</p>
+                        <div class="prod-price" id="mPrice">—</div>
+                    </div>
+                </div>
+
+                <p class="prod-desc" id="mDesc"></p>
+
+                <div class="warn" id="modalWarn"></div>
+
+                <div class="field-row">
+                    <div>
+                        <label>Kleur <span class="req">*</span></label>
+                        <select id="mColor"></select>
+                    </div>
+                    <div>
+                        <label>Aantal <span class="req">*</span></label>
+                        <input type="number" id="mQty" min="1" max="50" value="1">
+                    </div>
+                </div>
+
+                <div id="mCustomTextWrap" style="display:none;">
+                    <label>Gewenste tekst op keychain <span class="req">*</span></label>
+                    <input type="text" id="mCustomText" maxlength="14" placeholder="max 14 tekens">
+                </div>
+
+                <div class="modal-divider"></div>
+
+                <div class="field-row">
+                    <div><label>Naam <span class="req">*</span></label><input type="text" id="oName" placeholder="Voor- en achternaam" required></div>
+                    <div><label>Telefoon</label><input type="tel" id="oPhone" placeholder="06 1234 5678"></div>
+                </div>
+                <label>E-mail <span class="req">*</span></label>
+                <input type="email" id="oEmail" placeholder="jouw@email.nl" required>
+                <div style="height: 12px;"></div>
+
+                <label>Straat + huisnr <span class="req">*</span></label>
+                <input type="text" id="oStreet" placeholder="Voorbeeldstraat 123" required>
+                <div style="height: 12px;"></div>
+
+                <div class="field-row">
+                    <div><label>Postcode <span class="req">*</span></label><input type="text" id="oZip" placeholder="1234 AB" required></div>
+                    <div><label>Plaats <span class="req">*</span></label><input type="text" id="oCity" placeholder="Amsterdam" required></div>
+                </div>
+
+                <label>Land <span class="req">*</span></label>
+                <select id="oCountry">
+                    <option value="NL">Nederland</option>
+                    <option value="BE">België</option>
+                    <option value="DE">Duitsland</option>
+                    <option value="FR">Frankrijk</option>
+                    <option value="LU">Luxemburg</option>
+                    <option value="AT">Oostenrijk</option>
+                    <option value="ES">Spanje</option>
+                    <option value="IT">Italië</option>
+                </select>
+                <div style="height: 12px;"></div>
+
+                <label>Opmerkingen</label>
+                <textarea id="oNotes" placeholder="Optioneel — wensen, afleverinstructies, etc."></textarea>
+
+                <label class="checkbox">
+                    <input type="checkbox" id="oTerms">
+                    <span>Ik ga akkoord met de voorwaarden en begrijp dat LYNK 3D Solutions mijn order in 3-7 werkdagen produceert en verstuurt.</span>
+                </label>
+
+                <div class="total">
+                    <span>Totaal incl. BTW en verzending</span>
+                    <span id="mTotal">€0,00</span>
+                </div>
+
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-outline" id="cancelOrder">Annuleren</button>
+                    <button type="button" class="btn btn-orange" id="confirmOrder">Naar betaling &rarr;</button>
+                </div>
+            </div>
+
+            <div class="loader" id="orderLoader">
+                <div class="spinner"></div>
+                <p>Bezig met aanmaken bestelling...</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <div class="logo-text">LYNK 3D Solutions</div>
+                    <p>Professionele 3D-printservice in Apeldoorn en Amersfoort. Van idee tot eindproduct. Onderdeel van CVL Solutions.</p>
+                </div>
+                <div>
+                    <h4>Shop</h4>
+                    <div class="footer-links">
+                        <a href="shop.html">Alle producten</a>
+                        <a href="calculator.html">Eigen STL uploaden</a>
+                        <a href="materialen.html">Materialen</a>
+                    </div>
+                </div>
+                <div>
+                    <h4>Contact</h4>
+                    <div class="footer-links">
+                        <a href="https://wa.me/31613277621">06 1327 7621 (WhatsApp)</a>
+                        <a href="mailto:info@cvlsolutions.nl">info@cvlsolutions.nl</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>&copy; 2026 LYNK 3D Solutions - onderdeel van CVL Solutions</span>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+    <script type="module" src="js/shop.js?v=1"></script>
+</body>
+</html>

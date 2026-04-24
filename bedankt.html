@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Bedankt voor je bestelling | LYNK 3D Solutions</title>
+    <meta name="description" content="Je bestelling is ontvangen. We starten direct met je 3D-print.">
+    <meta name="robots" content="noindex">
+    <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .thanks-section { padding: 140px 0 80px; background: var(--gray-light); min-height: 100vh; }
+        .thanks-card { background: var(--white); border-radius: 16px; padding: 48px; max-width: 620px; margin: 0 auto; box-shadow: 0 16px 48px rgba(0,0,0,0.08); border: 1px solid var(--border); text-align: center; }
+        .check-circle { width: 84px; height: 84px; margin: 0 auto 24px; border-radius: 50%; background: var(--teal-bg); display: flex; align-items: center; justify-content: center; color: var(--teal); }
+        .check-circle svg { width: 44px; height: 44px; stroke-width: 3; }
+        .order-tag { display: inline-block; background: var(--teal-bg); color: var(--teal); padding: 6px 14px; border-radius: 8px; font-family: monospace; font-size: 0.95rem; font-weight: 600; margin: 14px 0; }
+        .next-steps { background: var(--teal-bg); border-radius: 12px; padding: 24px; margin-top: 28px; text-align: left; }
+        .next-steps h3 { color: var(--teal); font-size: 1rem; margin-bottom: 12px; }
+        .next-steps ol { padding-left: 22px; margin: 0; }
+        .next-steps li { margin-bottom: 8px; color: var(--gray-dark); font-size: 0.92rem; }
+        .next-steps li::marker { color: var(--teal); font-weight: 700; }
+        .thanks-buttons { display: flex; gap: 12px; justify-content: center; margin-top: 28px; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <div class="container header-inner">
+            <a href="index.html" class="logo"><img src="img/logo.jpg" alt="LYNK 3D Solutions"><span class="logo-text">LYNK 3D Solutions</span><span style="font-size: 0.6rem; color: var(--gray-mid); display: block; margin-top: -2px; font-weight: 400;">onderdeel van CVL Solutions</span></a>
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="calculator.html">Calculator</a>
+                <a href="materialen.html">Materialen</a>
+                <a href="werkwijze.html">Werkwijze</a>
+                <a href="projecten.html">Projecten</a>
+                <a href="shop.html">Shop</a>
+                <a href="contact.html" class="btn btn-teal btn-sm nav-cta">Contact</a>
+            </nav>
+            <button class="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+        </div>
+        <div class="mobile-menu">
+            <a href="index.html">Home</a>
+            <a href="calculator.html">Calculator</a>
+            <a href="materialen.html">Materialen</a>
+            <a href="werkwijze.html">Werkwijze</a>
+            <a href="projecten.html">Projecten</a>
+            <a href="shop.html">Shop</a>
+            <a href="contact.html">Contact</a>
+        </div>
+    </header>
+
+    <section class="thanks-section">
+        <div class="container">
+            <div class="thanks-card">
+                <div class="check-circle">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <h1 style="font-size: 1.8rem;">Bedankt voor je bestelling!</h1>
+                <p style="color: var(--gray-dark);">Je betaling wordt momenteel verwerkt. Je ontvangt binnen enkele minuten een bevestigingsmail op het opgegeven e-mailadres.</p>
+
+                <div id="orderTag" class="order-tag" style="display:none;">Ordernummer: <span id="orderNum"></span></div>
+
+                <div class="next-steps">
+                    <h3>Wat gebeurt er nu?</h3>
+                    <ol>
+                        <li>Je ontvangt per e-mail een bevestiging met alle ordergegevens.</li>
+                        <li>Wij bekijken je STL en starten binnen 24 uur met printen.</li>
+                        <li>Je ontvangt een update zodra het klaar is voor verzending.</li>
+                        <li>PostNL bezorgt doorgaans binnen 3-7 werkdagen aan huis.</li>
+                    </ol>
+                </div>
+
+                <p style="margin-top: 24px; font-size: 0.9rem; color: var(--gray-dark);">Vragen? Neem gerust contact op via <a href="mailto:info@cvlsolutions.nl" style="color: var(--teal); font-weight: 600;">info@cvlsolutions.nl</a> of WhatsApp <a href="https://wa.me/31613277621" style="color: var(--teal); font-weight: 600;">06 1327 7621</a>.</p>
+
+                <div class="thanks-buttons">
+                    <a href="index.html" class="btn btn-outline">Terug naar home</a>
+                    <a href="calculator.html" class="btn btn-teal">Nog een print bestellen</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <div class="logo-text">LYNK 3D Solutions</div>
+                    <p>Professionele 3D-printservice in Apeldoorn en Amersfoort. Van idee tot eindproduct. Onderdeel van CVL Solutions.</p>
+                </div>
+                <div>
+                    <h4>Pagina's</h4>
+                    <div class="footer-links">
+                        <a href="index.html">Home</a>
+                        <a href="calculator.html">Calculator</a>
+                        <a href="materialen.html">Materialen</a>
+                        <a href="werkwijze.html">Werkwijze</a>
+                    </div>
+                </div>
+                <div>
+                    <h4>Contact</h4>
+                    <div class="footer-links">
+                        <a href="https://wa.me/31613277621">06 1327 7621 (WhatsApp)</a>
+                        <a href="mailto:info@cvlsolutions.nl">info@cvlsolutions.nl</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>&copy; 2026 LYNK 3D Solutions - onderdeel van CVL Solutions</span>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('order');
+        if (orderId) {
+            document.getElementById('orderNum').textContent = orderId;
+            document.getElementById('orderTag').style.display = 'inline-block';
+        }
+    </script>
+</body>
+</html>

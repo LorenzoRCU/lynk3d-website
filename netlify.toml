@@ -1,0 +1,22 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+[functions."create-order"]
+  # Allow larger STL uploads (default body limit is small)
+  # Netlify async function limit; STL max is 50MB enforced in code
+  included_files = []
+
+# SPA-friendly redirects (not strictly needed, but keeps clean URLs)
+[[redirects]]
+  from = "/calculator"
+  to = "/calculator.html"
+  status = 200
+
+[[redirects]]
+  from = "/bedankt"
+  to = "/bedankt.html"
+  status = 200
