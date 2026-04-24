@@ -94,29 +94,64 @@ export default async (req, context) => {
     return new Response('ok', { status: 200 });
 };
 
-// ---------- Mail via BIM LYNK relay ----------
-async function sendViaRelay(subject, html, { to, replyTo, attachments } = {}) {
-    const url = process.env.MAIL_RELAY_URL;
-    const secret = process.env.MAIL_RELAY_SECRET;
-    if (!url || !secret) throw new Error('MAIL_RELAY_URL / MAIL_RELAY_SECRET ontbreken');
-
-    const recipient = to || process.env.NOTIFICATION_EMAIL || 'info@cvlsolutions.nl';
-
-    const res = await fetch(url, {
+// ---------- Mail via Microsoft Graph (reuses BIM LYNK's Azure app registration) ----------
+async function getGraphToken() {
+    const tenant = process.env.GRAPH_TENANT_ID;
+    const clientId = process.env.GRAPH_CLIENT_ID;
+    const clientSecret = process.env.GRAPH_CLIENT_SECRET;
+    if (!tenant || !clientId || !clientSecret) {
+        throw new Error('GRAPH_TENANT_ID / GRAPH_CLIENT_ID / GRAPH_CLIENT_SECRET ontbreken');
+    }
+    const tokenRes = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            secret,
-            subject,
-            html,
-            to: recipient,
-            replyTo,
-            attachments,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            scope: 'https://graph.microsoft.com/.default',
+            grant_type: 'client_credentials',
         }),
     });
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Mail relay failed (${res.status}): ${errText.slice(0, 300)}`);
+    if (!tokenRes.ok) throw new Error('Graph token fetch failed: ' + await tokenRes.text());
+    return (await tokenRes.json()).access_token;
+}
+
+async function sendViaRelay(subject, html, { to, replyTo, attachments } = {}) {
+    const sender = process.env.GRAPH_SENDER_EMAIL || 'info@bimlynk.com';
+    const recipient = to || process.env.NOTIFICATION_EMAIL || 'info@cvlsolutions.nl';
+    const toList = Array.isArray(recipient) ? recipient : [recipient];
+
+    const token = await getGraphToken();
+
+    const message = {
+        subject,
+        body: { contentType: 'HTML', content: html },
+        toRecipients: toList.map(addr => ({ emailAddress: { address: addr } })),
+    };
+    if (replyTo) {
+        const r = typeof replyTo === 'string' ? { address: replyTo } : replyTo;
+        message.replyTo = [{ emailAddress: r }];
+    }
+    if (Array.isArray(attachments) && attachments.length) {
+        message.attachments = attachments.map(a => ({
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            name: a.name,
+            contentType: a.contentType || 'application/octet-stream',
+            contentBytes: a.contentBase64,
+        }));
+    }
+
+    const sendRes = await fetch(
+        `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`,
+        {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, saveToSentItems: 'true' }),
+        },
+    );
+    if (!sendRes.ok) {
+        const errText = await sendRes.text();
+        throw new Error(`Graph sendMail failed (${sendRes.status}): ${errText.slice(0, 300)}`);
     }
 }
 
