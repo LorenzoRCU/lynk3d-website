@@ -200,24 +200,32 @@ function estimatePrintHours(volumeCm3, infill = 0.20) {
 }
 
 // ---------- Pricing ----------
+// Material & print schalen met aantal; labor + packaging zijn order-level
+// (één batch post-processing / één doos / etc). Marge + BTW over het geheel.
 function calculatePrice({ weightG, printHours, quantity, filamentName, shippingZone }) {
     const filament = FILAMENTS[filamentName];
+
+    // Per-stuk (schaalbaar)
     const materialCost = (weightG / 1000) * filament.priceKg * SETTINGS.materialEfficiency;
     const printCost = printHours * SETTINGS.printRate;
+
+    // Order-niveau (vast, ongeacht quantity)
     const laborCost = SETTINGS.defaultLaborHours * SETTINGS.laborRate;
     const packagingCost = SETTINGS.packaging;
 
-    const perUnitCost = materialCost + printCost + laborCost + packagingCost;
-    const perUnitWithMargin = perUnitCost * (1 + SETTINGS.margin);
-    const perUnitIncVat = perUnitWithMargin * (1 + SETTINGS.vat);
+    // Total kosten (excl BTW)
+    const totalCostExVat = (materialCost + printCost) * quantity + laborCost + packagingCost;
+    const totalWithMargin = totalCostExVat * (1 + SETTINGS.margin);
+    const totalIncVat_preMin = totalWithMargin * (1 + SETTINGS.vat);
 
-    // Minimum €25 geldt op de HELE order (native × quantity), niet per stuk.
-    // Zo betaalt iemand die 10× een klein ding wil de faire bulkprijs en niet
-    // 10 × €25.
-    const nativeLineIncVat = perUnitIncVat * quantity;
-    const lineIncVat = Math.max(nativeLineIncVat, SETTINGS.minPriceIncVat);
-    const minKicksIn = nativeLineIncVat < SETTINGS.minPriceIncVat;
+    // Minimum €25 geldt op de hele order line
+    const lineIncVat = Math.max(totalIncVat_preMin, SETTINGS.minPriceIncVat);
+    const minKicksIn = totalIncVat_preMin < SETTINGS.minPriceIncVat;
     const perUnit = lineIncVat / quantity;
+
+    // Native per-unit — gebruikt voor de "bij X stuks" tip
+    const perStukCostExVat = materialCost + printCost;
+    const nativePerUnitIncVat = perStukCostExVat * (1 + SETTINGS.margin) * (1 + SETTINGS.vat);
 
     // Order-level handling (baked into subtotal, geen aparte regel)
     const handlingIncVat = SETTINGS.handlingIncVat;
@@ -228,13 +236,25 @@ function calculatePrice({ weightG, printHours, quantity, filamentName, shippingZ
     const shippingCost = subtotalIncVat >= SETTINGS.freeShippingThreshold ? 0 : (SHIPPING[shippingZone] || 0);
     const totalIncVat = subtotalIncVat + shippingCost;
 
-    // How many units to reach the €25 minimum naturally (for UX hint)
-    const breakEvenQty = perUnitIncVat > 0 ? Math.ceil(SETTINGS.minPriceIncVat / perUnitIncVat) : null;
-    const breakEvenPrice = breakEvenQty ? (perUnitIncVat * breakEvenQty) : null;
+    // Hoeveel stuks zijn er nodig om "natuurlijk" boven €25 uit te komen?
+    // Order-level labor+packaging zijn de vaste kosten die we moeten dekken.
+    // We zoeken de qty waarop de berekende prijs incl margin+BTW ≥ €25.
+    let breakEvenQty = null;
+    let breakEvenPrice = null;
+    if (perStukCostExVat > 0) {
+        for (let q = quantity + 1; q <= 500; q++) {
+            const priceAtQ = ((perStukCostExVat) * q + laborCost + packagingCost) * (1 + SETTINGS.margin) * (1 + SETTINGS.vat);
+            if (priceAtQ >= SETTINGS.minPriceIncVat) {
+                breakEvenQty = q;
+                breakEvenPrice = priceAtQ;
+                break;
+            }
+        }
+    }
 
     return {
         perUnitIncVat: perUnit,
-        nativePerUnitIncVat: perUnitIncVat,
+        nativePerUnitIncVat,
         subtotal: subtotalExVat,
         vat: vatAmount,
         subtotalIncVat,
