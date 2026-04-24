@@ -210,10 +210,14 @@ function calculatePrice({ weightG, printHours, quantity, filamentName, shippingZ
     const perUnitCost = materialCost + printCost + laborCost + packagingCost;
     const perUnitWithMargin = perUnitCost * (1 + SETTINGS.margin);
     const perUnitIncVat = perUnitWithMargin * (1 + SETTINGS.vat);
-    const perUnit = Math.max(perUnitIncVat, SETTINGS.minPriceIncVat);
-    const minKicksIn = perUnitIncVat < SETTINGS.minPriceIncVat;
 
-    const lineIncVat = perUnit * quantity;
+    // Minimum €25 geldt op de HELE order (native × quantity), niet per stuk.
+    // Zo betaalt iemand die 10× een klein ding wil de faire bulkprijs en niet
+    // 10 × €25.
+    const nativeLineIncVat = perUnitIncVat * quantity;
+    const lineIncVat = Math.max(nativeLineIncVat, SETTINGS.minPriceIncVat);
+    const minKicksIn = nativeLineIncVat < SETTINGS.minPriceIncVat;
+    const perUnit = lineIncVat / quantity;
 
     // Order-level handling (baked into subtotal, geen aparte regel)
     const handlingIncVat = SETTINGS.handlingIncVat;
@@ -224,14 +228,21 @@ function calculatePrice({ weightG, printHours, quantity, filamentName, shippingZ
     const shippingCost = subtotalIncVat >= SETTINGS.freeShippingThreshold ? 0 : (SHIPPING[shippingZone] || 0);
     const totalIncVat = subtotalIncVat + shippingCost;
 
+    // How many units to reach the €25 minimum naturally (for UX hint)
+    const breakEvenQty = perUnitIncVat > 0 ? Math.ceil(SETTINGS.minPriceIncVat / perUnitIncVat) : null;
+    const breakEvenPrice = breakEvenQty ? (perUnitIncVat * breakEvenQty) : null;
+
     return {
         perUnitIncVat: perUnit,
+        nativePerUnitIncVat: perUnitIncVat,
         subtotal: subtotalExVat,
         vat: vatAmount,
         subtotalIncVat,
         shipping: shippingCost,
         totalIncVat,
         minKicksIn,
+        breakEvenQty,
+        breakEvenPrice,
         breakdown: {
             materialCost,
             printCost,
@@ -539,8 +550,13 @@ function recalc() {
     shipEl.textContent = price.shipping === 0 ? 'Gratis' : fmtEuro.format(price.shipping);
     totalEl.textContent = fmtEuro.format(price.totalIncVat);
 
-    if (price.minKicksIn) noteEl.textContent = 'Minimum prijs €25 incl. BTW per stuk is toegepast';
-    else noteEl.textContent = 'Alle prijzen incl. BTW, inclusief verzending binnen EU';
+    if (price.minKicksIn && price.breakEvenQty && price.breakEvenQty > quantity) {
+        noteEl.innerHTML = `Minimum orderwaarde &euro;25 toegepast. <b>Tip:</b> bij ${price.breakEvenQty} stuks krijg je ${price.breakEvenQty}× voor &euro;${price.breakEvenPrice.toFixed(2).replace('.', ',')}.`;
+    } else if (price.minKicksIn) {
+        noteEl.textContent = 'Minimum orderwaarde €25 incl. BTW is toegepast';
+    } else {
+        noteEl.textContent = 'Alle prijzen incl. BTW, inclusief verzending binnen EU';
+    }
 
     btn.disabled = false;
 
