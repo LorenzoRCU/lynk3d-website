@@ -117,7 +117,7 @@
                 <div class="shop-badges">
                     <span class="shop-badge">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                        Gratis verzending EU
+                        Gratis verzending vanaf €50
                     </span>
                     <span class="shop-badge">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -212,9 +212,19 @@
                     <span>Ik ga akkoord met de voorwaarden en begrijp dat LYNK 3D Solutions mijn order in 3-7 werkdagen produceert en verstuurt.</span>
                 </label>
 
-                <div class="total">
-                    <span>Totaal incl. BTW en verzending</span>
-                    <span id="mTotal">€0,00</span>
+                <div style="border-top: 1px solid var(--border); margin-top: 18px; padding-top: 14px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--gray-dark); margin-bottom: 6px;">
+                        <span>Subtotaal</span>
+                        <span id="mSubtotal">€0,00</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--gray-dark); margin-bottom: 6px;">
+                        <span>Verzending</span>
+                        <span id="mShipping">€0,00</span>
+                    </div>
+                    <div class="total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);">
+                        <span>Totaal incl. BTW</span>
+                        <span id="mTotal">€0,00</span>
+                    </div>
                 </div>
 
                 <div class="modal-buttons">
@@ -260,6 +270,6 @@
     </footer>
 
     <script src="js/main.js"></script>
-    <script type="module" src="js/shop.js?v=2"></script>
+    <script type="module" src="js/shop.js?v=3"></script>
 </body>
 </html>

@@ -386,6 +386,8 @@ async function sendProductOrderEmail(order) {
                 <tr><td><b>Aantal</b></td><td>${cfg.quantity}</td></tr>
                 ${customLine}
                 <tr><td><b>Stuksprijs</b></td><td>${euro(prod.unitPrice)}</td></tr>
+                ${p.subtotal != null ? `<tr><td>Subtotaal</td><td>${euro(p.subtotal)}</td></tr>` : ''}
+                ${p.shipping != null ? `<tr><td>Verzending</td><td>${euro(p.shipping)}</td></tr>` : ''}
                 <tr><td><b>Totaal</b></td><td><b>${euro(p.totalIncVat)}</b></td></tr>
             </table>
 

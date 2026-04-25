@@ -7,14 +7,10 @@ import { unzipSync, strFromU8 } from 'https://esm.sh/fflate@0.8.2';
 const SETTINGS = {
     materialEfficiency: 1.15,   // 15% overschot
     printRate: 1.50,            // €/uur machine
-    laborRate: 35.00,           // €/uur
-    defaultLaborHours: 0.25,    // post-processing per order
-    packaging: 1.50,            // €
-    margin: 0.50,               // 50% (was 60)
+    margin: 0.50,               // 50% marge (dekt overhead)
     vat: 0.21,                  // 21%
-    minPriceIncVat: 25.00,      // minimum incl BTW per stuk
-    handlingIncVat: 7.00,       // verzend+handling volledig ingebakken (was 3, shipping apart)
-    freeShippingThreshold: 0,   // alles is gratis verzending (baked-in)
+    minPriceIncVat: 25.00,      // minimum product-totaal (excl. verzending)
+    freeShippingThreshold: 50,  // gratis verzending boven dit product-totaal
 };
 
 const FILAMENTS = {
@@ -30,9 +26,8 @@ const FILAMENTS = {
     'PC':         { priceKg: 50, density: 1.20 },
 };
 
-// Alle zones zichtbaar gratis — kosten zitten in handlingIncVat
-// EU/BE verschil nog wel tracken voor admin, maar klant ziet €0 op de order
-const SHIPPING = { NL: 0, BE: 0, EU: 0 };
+// Verzending per zone (incl BTW). Gratis boven freeShippingThreshold.
+const SHIPPING = { NL: 3.95, BE: 5.95, EU: 7.95 };
 
 const PRINT_BED_MM = 256; // Bambu P1S
 const MAX_FILE_MB = 6; // Netlify Functions v2 accepts ~10MB body; base64 overhead ~33%
@@ -214,16 +209,22 @@ function calculatePrice({ weightG, printHours, quantity, filamentName, shippingZ
     const perStukExVat = perStukCostExVat * (1 + SETTINGS.margin);
     const perStukIncVat = perStukExVat * (1 + SETTINGS.vat);
 
-    // Totaal (native × qty), minimum €25 all-in
+    // Product-totaal (native × qty), minimum €25 op product-niveau
     const totalNative = perStukIncVat * quantity;
-    const totalIncVat = Math.max(totalNative, SETTINGS.minPriceIncVat);
+    const productIncVat = Math.max(totalNative, SETTINGS.minPriceIncVat);
     const minKicksIn = totalNative < SETTINGS.minPriceIncVat;
-    const perUnit = totalIncVat / quantity;
+    const perUnit = productIncVat / quantity;
 
-    const subtotalIncVat = totalIncVat;
+    // Verzending: gratis boven threshold, anders zone-prijs
+    const shippingCost = productIncVat >= SETTINGS.freeShippingThreshold
+        ? 0
+        : (SHIPPING[shippingZone] || SHIPPING.EU);
+
+    // Eindbedrag = product + verzending
+    const totalIncVat = productIncVat + shippingCost;
+    const subtotalIncVat = productIncVat;
     const subtotalExVat = subtotalIncVat / (1 + SETTINGS.vat);
     const vatAmount = subtotalIncVat - subtotalExVat;
-    const shippingCost = 0; // baked-in: alles inclusief
 
     // Break-even: hoeveel stuks nodig om uit de min te komen?
     let breakEvenQty = null;
@@ -240,6 +241,7 @@ function calculatePrice({ weightG, printHours, quantity, filamentName, shippingZ
     return {
         perUnitIncVat: perUnit,
         nativePerUnitIncVat: perStukIncVat,
+        productIncVat,
         subtotal: subtotalExVat,
         vat: vatAmount,
         subtotalIncVat,
@@ -251,9 +253,6 @@ function calculatePrice({ weightG, printHours, quantity, filamentName, shippingZ
         breakdown: {
             materialCost,
             printCost,
-            laborCost: 0,
-            packagingCost: 0,
-            handlingBakedIn: 0,
             marginPct: SETTINGS.margin,
         },
     };
@@ -555,13 +554,17 @@ function recalc() {
     shipEl.textContent = price.shipping === 0 ? 'Gratis' : fmtEuro.format(price.shipping);
     totalEl.textContent = fmtEuro.format(price.totalIncVat);
 
+    let note = '';
     if (price.minKicksIn && price.breakEvenQty && price.breakEvenQty > quantity) {
-        noteEl.innerHTML = `Minimum orderwaarde &euro;25 toegepast. <b>Tip:</b> bij ${price.breakEvenQty} stuks krijg je ${price.breakEvenQty}× voor &euro;${price.breakEvenPrice.toFixed(2).replace('.', ',')}.`;
+        note = `Minimum orderwaarde &euro;25 toegepast. <b>Tip:</b> bij ${price.breakEvenQty} stuks krijg je ${price.breakEvenQty}× voor &euro;${price.breakEvenPrice.toFixed(2).replace('.', ',')}.`;
     } else if (price.minKicksIn) {
-        noteEl.textContent = 'Minimum orderwaarde €25 incl. BTW is toegepast';
+        note = 'Minimum orderwaarde €25 incl. BTW is toegepast';
+    } else if (price.shipping === 0 && price.productIncVat >= 50) {
+        note = 'Gratis verzending toegepast (vanaf €50 product-totaal)';
     } else {
-        noteEl.textContent = 'Alle prijzen incl. BTW, inclusief verzending binnen EU';
+        note = 'Tip: gratis verzending vanaf €50 product-totaal';
     }
+    noteEl.innerHTML = note;
 
     btn.disabled = false;
 

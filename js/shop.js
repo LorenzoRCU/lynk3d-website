@@ -1,4 +1,4 @@
-import { PRODUCTS, findProduct } from './products.js?v=1';
+import { PRODUCTS, findProduct, shippingFor } from './products.js?v=2';
 
 const fmtEuro = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
 let activeProduct = null;
@@ -18,7 +18,7 @@ function renderGrid() {
                 <div class="price-row">
                     <div>
                         <div class="price">${fmtEuro.format(p.price)}</div>
-                        <div class="price-meta">incl. BTW &amp; verzending</div>
+                        <div class="price-meta">incl. BTW, excl. verzending</div>
                     </div>
                     <button type="button" class="buy-btn">Bestel</button>
                 </div>
@@ -68,7 +68,12 @@ function closeModal() {
 function updateTotal() {
     if (!activeProduct) return;
     const qty = Math.max(1, parseInt(document.getElementById('mQty').value || 1));
-    const total = activeProduct.price * qty;
+    const country = document.getElementById('oCountry').value;
+    const subtotal = activeProduct.price * qty;
+    const shipping = shippingFor(country, subtotal);
+    const total = subtotal + shipping;
+    document.getElementById('mSubtotal').textContent = fmtEuro.format(subtotal);
+    document.getElementById('mShipping').textContent = shipping === 0 ? 'Gratis' : fmtEuro.format(shipping);
     document.getElementById('mTotal').textContent = fmtEuro.format(total);
 }
 
@@ -116,7 +121,9 @@ async function submitOrder() {
     document.getElementById('orderLoader').classList.add('show');
 
     try {
-        const totalIncVat = +(activeProduct.price * qty).toFixed(2);
+        const subtotal = +(activeProduct.price * qty).toFixed(2);
+        const shipping = +shippingFor(country, subtotal).toFixed(2);
+        const totalIncVat = +(subtotal + shipping).toFixed(2);
         const payload = {
             type: 'product',
             product: {
@@ -127,7 +134,7 @@ async function submitOrder() {
             },
             customer: { firstName, lastName, name, email, phone, street, zip, city, country, notes },
             config: { color, quantity: qty, customText },
-            price: { totalIncVat, unitPrice: activeProduct.price, quantity: qty },
+            price: { subtotal, shipping, totalIncVat, unitPrice: activeProduct.price, quantity: qty },
         };
 
         const res = await fetch('/.netlify/functions/create-product-order', {
@@ -156,6 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderGrid();
 
     document.getElementById('mQty').addEventListener('input', updateTotal);
+    document.getElementById('oCountry').addEventListener('change', updateTotal);
     document.getElementById('modalClose').addEventListener('click', closeModal);
     document.getElementById('cancelOrder').addEventListener('click', closeModal);
     document.getElementById('confirmOrder').addEventListener('click', submitOrder);
