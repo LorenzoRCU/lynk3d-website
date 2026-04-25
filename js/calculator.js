@@ -200,61 +200,46 @@ function estimatePrintHours(volumeCm3, infill = 0.20) {
 }
 
 // ---------- Pricing ----------
-// Material & print schalen met aantal; labor + packaging zijn order-level
-// (één batch post-processing / één doos / etc). Marge + BTW over het geheel.
+// Simpel lineair model: native per stuk = (materiaal + print) × marge × BTW.
+// Totaal = native × quantity. Minimum €25 is all-in (verzending gratis).
+// De marge dekt overhead (post-processing, packaging, verzending).
 function calculatePrice({ weightG, printHours, quantity, filamentName, shippingZone }) {
     const filament = FILAMENTS[filamentName];
 
-    // Per-stuk (schaalbaar)
     const materialCost = (weightG / 1000) * filament.priceKg * SETTINGS.materialEfficiency;
     const printCost = printHours * SETTINGS.printRate;
-
-    // Order-niveau (vast, ongeacht quantity)
-    const laborCost = SETTINGS.defaultLaborHours * SETTINGS.laborRate;
-    const packagingCost = SETTINGS.packaging;
-
-    // Total kosten (excl BTW)
-    const totalCostExVat = (materialCost + printCost) * quantity + laborCost + packagingCost;
-    const totalWithMargin = totalCostExVat * (1 + SETTINGS.margin);
-    const totalIncVat_preMin = totalWithMargin * (1 + SETTINGS.vat);
-
-    // Minimum €25 geldt op de hele order line
-    const lineIncVat = Math.max(totalIncVat_preMin, SETTINGS.minPriceIncVat);
-    const minKicksIn = totalIncVat_preMin < SETTINGS.minPriceIncVat;
-    const perUnit = lineIncVat / quantity;
-
-    // Native per-unit — gebruikt voor de "bij X stuks" tip
     const perStukCostExVat = materialCost + printCost;
-    const nativePerUnitIncVat = perStukCostExVat * (1 + SETTINGS.margin) * (1 + SETTINGS.vat);
 
-    // Order-level handling (baked into subtotal, geen aparte regel)
-    const handlingIncVat = SETTINGS.handlingIncVat;
-    const subtotalIncVat = lineIncVat + handlingIncVat;
+    // Native verkoopprijs per stuk
+    const perStukExVat = perStukCostExVat * (1 + SETTINGS.margin);
+    const perStukIncVat = perStukExVat * (1 + SETTINGS.vat);
+
+    // Totaal (native × qty), minimum €25 all-in
+    const totalNative = perStukIncVat * quantity;
+    const totalIncVat = Math.max(totalNative, SETTINGS.minPriceIncVat);
+    const minKicksIn = totalNative < SETTINGS.minPriceIncVat;
+    const perUnit = totalIncVat / quantity;
+
+    const subtotalIncVat = totalIncVat;
     const subtotalExVat = subtotalIncVat / (1 + SETTINGS.vat);
     const vatAmount = subtotalIncVat - subtotalExVat;
+    const shippingCost = 0; // baked-in: alles inclusief
 
-    const shippingCost = subtotalIncVat >= SETTINGS.freeShippingThreshold ? 0 : (SHIPPING[shippingZone] || 0);
-    const totalIncVat = subtotalIncVat + shippingCost;
-
-    // Hoeveel stuks zijn er nodig om "natuurlijk" boven €25 uit te komen?
-    // Order-level labor+packaging zijn de vaste kosten die we moeten dekken.
-    // We zoeken de qty waarop de berekende prijs incl margin+BTW ≥ €25.
+    // Break-even: hoeveel stuks nodig om uit de min te komen?
     let breakEvenQty = null;
     let breakEvenPrice = null;
-    if (perStukCostExVat > 0) {
-        for (let q = quantity + 1; q <= 500; q++) {
-            const priceAtQ = ((perStukCostExVat) * q + laborCost + packagingCost) * (1 + SETTINGS.margin) * (1 + SETTINGS.vat);
-            if (priceAtQ >= SETTINGS.minPriceIncVat) {
-                breakEvenQty = q;
-                breakEvenPrice = priceAtQ;
-                break;
-            }
+    if (perStukIncVat > 0 && minKicksIn) {
+        breakEvenQty = Math.ceil(SETTINGS.minPriceIncVat / perStukIncVat);
+        if (breakEvenQty > quantity) {
+            breakEvenPrice = perStukIncVat * breakEvenQty;
+        } else {
+            breakEvenQty = null;
         }
     }
 
     return {
         perUnitIncVat: perUnit,
-        nativePerUnitIncVat,
+        nativePerUnitIncVat: perStukIncVat,
         subtotal: subtotalExVat,
         vat: vatAmount,
         subtotalIncVat,
@@ -266,9 +251,9 @@ function calculatePrice({ weightG, printHours, quantity, filamentName, shippingZ
         breakdown: {
             materialCost,
             printCost,
-            laborCost,
-            packagingCost,
-            handlingBakedIn: handlingIncVat,
+            laborCost: 0,
+            packagingCost: 0,
+            handlingBakedIn: 0,
             marginPct: SETTINGS.margin,
         },
     };
