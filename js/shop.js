@@ -34,9 +34,21 @@ function escapeHtml(s) {
 
 function renderGrid() {
     const grid = document.getElementById('shopGrid');
-    grid.innerHTML = PRODUCTS.map(p => `
-        <div class="product-card" data-id="${p.id}">
-            <div class="image"><img src="${p.image}" alt="${escapeHtml(p.name)}" loading="lazy"></div>
+    grid.innerHTML = PRODUCTS.map(p => {
+        // Etsy-listing producten: toon "Op Etsy" badge + directe link i.p.v. modaal
+        const isEtsy = p.source === 'etsy_listing' || (p.etsy_url && /etsy\.com\/listing/.test(p.etsy_url));
+        const etsyBadge = isEtsy
+            ? `<a class="etsy-badge" href="${escapeHtml(p.etsy_url || '#')}" target="_blank" rel="noopener" title="Bekijk op Etsy">Op Etsy &#8599;</a>`
+            : '';
+        const buyBtn = isEtsy
+            ? `<a class="buy-btn etsy-buy" href="${escapeHtml(p.etsy_url || '#')}" target="_blank" rel="noopener">Bekijk op Etsy</a>`
+            : `<button type="button" class="buy-btn">Bestel</button>`;
+        return `
+        <div class="product-card${isEtsy ? ' product-card--etsy' : ''}" data-id="${p.id}" data-etsy="${isEtsy ? '1' : '0'}">
+            <div class="image">
+                <img src="${p.image}" alt="${escapeHtml(p.name)}" loading="lazy">
+                ${etsyBadge}
+            </div>
             <div class="body">
                 <h3>${escapeHtml(p.name)}</h3>
                 <p class="subtitle">${escapeHtml(p.subtitle)}</p>
@@ -45,14 +57,27 @@ function renderGrid() {
                         <div class="price">${fmtEuro.format(p.price)}</div>
                         <div class="price-meta">incl. BTW, excl. verzending</div>
                     </div>
-                    <button type="button" class="buy-btn">Bestel</button>
+                    ${buyBtn}
                 </div>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 
     grid.querySelectorAll('.product-card').forEach(card => {
-        card.addEventListener('click', () => openModal(card.dataset.id));
+        card.addEventListener('click', (ev) => {
+            // Voor Etsy-producten: laat de <a> z'n werk doen, geen modaal
+            if (card.dataset.etsy === '1') {
+                // Als klik op de buy-button → laat default navigatie door
+                // Als elders op de card → ook naar Etsy
+                const p = findProduct(card.dataset.id);
+                if (p && p.etsy_url && !ev.target.closest('a')) {
+                    window.open(p.etsy_url, '_blank', 'noopener');
+                }
+                return;
+            }
+            openModal(card.dataset.id);
+        });
     });
 }
 

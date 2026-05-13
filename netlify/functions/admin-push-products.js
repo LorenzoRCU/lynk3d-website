@@ -1,13 +1,26 @@
 // Netlify Function: admin-push-products
 // Receives a JSON array of product-objects and stores them in the
 // lynk3d-products blob under key 'products.json'. Used by EtsyManager
-// to sync Etsy-uploaded concepts to the Lynk3D shop.
+// to sync Etsy-uploaded concepts AND active Etsy listings to the Lynk3D shop.
 // Auth via Authorization: Bearer <ADMIN_BEARER_TOKEN>.
 //
 // Products may carry an `images: [{filename, base64, content_type}]` array.
 // Each image is decoded and stored in the `lynk3d-product-images` blob
 // under key `<product_id>/<filename>`. The first image becomes the
 // product's `image` URL (served by get-product-image.js).
+//
+// Idempotency / merge semantics:
+//   - Incoming products with the same `id` UPDATE the existing entry.
+//   - Existing products NOT in the incoming payload are PRESERVED (so
+//     daily Etsy-listings-sync doesn't wipe Etsy-draft products and vice
+//     versa). To force a full replace, pass query param ?mode=replace.
+//   - If `source === 'etsy_listing'` we additionally dedupe on
+//     `etsy_listing_id`: an existing product (regardless of id) with the
+//     same etsy_listing_id is updated in-place — id gets normalized to
+//     `etsy-<listing_id>`.
+//   - If incoming product has no `images` but the existing entry already
+//     has an `image` set (uploaded earlier), we KEEP the existing image
+//     URL — never blank out a working image.
 
 import { getStore } from '@netlify/blobs';
 
@@ -25,6 +38,9 @@ export default async (req) => {
         return jsonError('Unauthorized', 401);
     }
 
+    const url = new URL(req.url);
+    const mode = (url.searchParams.get('mode') || 'merge').toLowerCase();
+
     let products;
     try {
         products = await req.json();
@@ -36,27 +52,35 @@ export default async (req) => {
     }
 
     // Light shape validation — accept and clean each product
-    const baseProducts = products
+    const incoming = products
         .filter((p) => p && typeof p === 'object' && p.id && p.name)
-        .map((p) => ({
-            id: String(p.id),
-            name: String(p.name),
-            subtitle: String(p.subtitle || ''),
-            price: Number(p.price) || 0,
-            image: String(p.image || '/img/lynk3d-product.png'),
-            colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
-            material: String(p.material || 'PLA'),
-            description: String(p.description || ''),
-            etsy_url: p.etsy_url ? String(p.etsy_url) : null,
-            images: Array.isArray(p.images) ? p.images : [],
-        }));
+        .map((p) => {
+            const etsyListingId =
+                p.etsy_listing_id != null && !Number.isNaN(Number(p.etsy_listing_id))
+                    ? Number(p.etsy_listing_id)
+                    : null;
+            return {
+                id: String(p.id),
+                name: String(p.name),
+                subtitle: String(p.subtitle || ''),
+                price: Number(p.price) || 0,
+                image: String(p.image || '/img/lynk3d-product.png'),
+                colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
+                material: String(p.material || 'PLA'),
+                description: String(p.description || ''),
+                etsy_url: p.etsy_url ? String(p.etsy_url) : null,
+                source: p.source ? String(p.source) : 'draft',
+                etsy_listing_id: etsyListingId,
+                images: Array.isArray(p.images) ? p.images : [],
+            };
+        });
 
     // Persist images into lynk3d-product-images blob store, replace product.image
     let imagesStored = 0;
     let imageErrors = 0;
     try {
         const imageStore = getStore({ name: 'lynk3d-product-images' });
-        for (const p of baseProducts) {
+        for (const p of incoming) {
             if (!p.images.length) continue;
             let firstUrl = null;
             for (const img of p.images) {
@@ -90,13 +114,66 @@ export default async (req) => {
     }
 
     // Strip the `images` payload before persisting products.json (keep blob small)
-    const cleaned = baseProducts.map(({ images, ...rest }) => rest);
+    const incomingCleaned = incoming.map(({ images, ...rest }) => rest);
+
+    // Load existing products and merge (unless mode=replace)
+    const store = getStore({ name: 'lynk3d-products', consistency: 'strong' });
+    let existing = [];
+    try {
+        const existingData = await store.get('products.json', { type: 'json' });
+        existing = Array.isArray(existingData)
+            ? existingData
+            : (existingData && Array.isArray(existingData.products) ? existingData.products : []);
+    } catch (e) {
+        console.warn('Could not load existing products.json — assuming empty:', e);
+    }
+
+    let merged;
+    if (mode === 'replace') {
+        merged = incomingCleaned;
+    } else {
+        // Build lookup maps for existing
+        const byId = new Map();
+        const byEtsy = new Map();
+        for (const p of existing) {
+            if (!p || !p.id) continue;
+            byId.set(p.id, p);
+            if (p.etsy_listing_id != null) byEtsy.set(Number(p.etsy_listing_id), p);
+        }
+
+        // Apply each incoming update
+        for (const inc of incomingCleaned) {
+            // Resolve which existing entry (if any) this incoming maps onto
+            let prev = null;
+            if (inc.source === 'etsy_listing' && inc.etsy_listing_id != null) {
+                prev = byEtsy.get(inc.etsy_listing_id) || byId.get(inc.id);
+            } else {
+                prev = byId.get(inc.id);
+            }
+            if (prev) {
+                // If incoming has no fresh image and existing already had one,
+                // keep the existing image URL (do not blank-out).
+                if (
+                    (!inc.image || inc.image === '/img/lynk3d-product.png') &&
+                    prev.image &&
+                    prev.image !== '/img/lynk3d-product.png'
+                ) {
+                    inc.image = prev.image;
+                }
+                // Replace the prev entry in-place
+                byId.delete(prev.id);
+                if (prev.etsy_listing_id != null) byEtsy.delete(Number(prev.etsy_listing_id));
+            }
+            byId.set(inc.id, inc);
+            if (inc.etsy_listing_id != null) byEtsy.set(inc.etsy_listing_id, inc);
+        }
+        merged = Array.from(byId.values());
+    }
 
     try {
-        const store = getStore({ name: 'lynk3d-products', consistency: 'strong' });
         await store.setJSON('products.json', {
             updatedAt: new Date().toISOString(),
-            products: cleaned,
+            products: merged,
         });
     } catch (e) {
         console.error('Blob write error:', e);
@@ -104,7 +181,13 @@ export default async (req) => {
     }
 
     return new Response(
-        JSON.stringify({ stored: cleaned.length, images_stored: imagesStored, image_errors: imageErrors }),
+        JSON.stringify({
+            mode,
+            received: incomingCleaned.length,
+            total: merged.length,
+            images_stored: imagesStored,
+            image_errors: imageErrors,
+        }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
 };

@@ -9,3 +9,4 @@ deno.lock
 .env
 .env.local
 .env.*.local
+etsy_manager.db
