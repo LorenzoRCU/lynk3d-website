@@ -12,11 +12,11 @@
     <link rel="stylesheet" href="css/style.css">
     <style>
         .calc-section { padding: 120px 0 60px; background: var(--gray-light); min-height: 100vh; }
-        .calc-intro { text-align: center; max-width: 700px; margin: 0 auto 40px; }
+        .calc-intro { text-align: center; max-width: 720px; margin: 0 auto 40px; }
         .calc-intro h1 { margin-bottom: 16px; }
         .calc-intro p { color: var(--gray-dark); font-size: 1.05rem; }
 
-        .calc-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; max-width: 1200px; margin: 0 auto; }
+        .calc-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; max-width: 1200px; margin: 0 auto; align-items: start; }
         @media (max-width: 900px) { .calc-grid { grid-template-columns: 1fr; } }
 
         .calc-card { background: var(--white); border-radius: 16px; padding: 28px; box-shadow: 0 8px 32px rgba(0,0,0,0.06); border: 1px solid var(--border); }
@@ -28,7 +28,7 @@
             border: 2px dashed var(--teal);
             border-radius: 12px;
             padding: 32px 24px;
-            min-height: 420px;
+            min-height: 320px;
             text-align: center;
             cursor: pointer;
             transition: all var(--transition);
@@ -43,41 +43,85 @@
             transform: translateY(-1px);
         }
         .dropzone.dragover { box-shadow: 0 0 0 4px rgba(32,67,62,0.15); }
-        .dropzone-icon { width: 72px; height: 72px; margin-bottom: 18px; color: var(--teal); flex-shrink: 0; }
-        .dropzone h3 { color: var(--teal); font-size: 1.15rem; margin-bottom: 8px; }
-        .dropzone p { color: var(--gray-dark); font-size: 0.9rem; margin-bottom: 0; max-width: 340px; line-height: 1.5; }
+        .dropzone-icon { width: 64px; height: 64px; margin-bottom: 16px; color: var(--teal); flex-shrink: 0; }
+        .dropzone h3 { color: var(--teal); font-size: 1.1rem; margin-bottom: 8px; }
+        .dropzone p { color: var(--gray-dark); font-size: 0.88rem; margin-bottom: 0; max-width: 360px; line-height: 1.5; }
         .dropzone input { display: none; }
+        .dropzone.compact { min-height: 140px; padding: 18px 16px; }
+        .dropzone.compact .dropzone-icon { width: 36px; height: 36px; margin-bottom: 8px; }
+        .dropzone.compact h3 { font-size: 0.98rem; margin-bottom: 4px; }
+        .dropzone.compact p { font-size: 0.8rem; }
         @media (max-width: 900px) {
-            .dropzone { min-height: 300px; }
-            .dropzone-icon { width: 56px; height: 56px; margin-bottom: 14px; }
+            .dropzone { min-height: 240px; }
         }
 
-        #viewer { width: 100%; height: 420px; background: linear-gradient(135deg, #f7f7f9 0%, #e9ebf0 100%); border-radius: 12px; position: relative; overflow: hidden; }
+        #viewer { width: 100%; height: 380px; background: linear-gradient(135deg, #f7f7f9 0%, #e9ebf0 100%); border-radius: 12px; position: relative; overflow: hidden; }
         #viewer canvas { display: block; }
-        .viewer-info { display: flex; justify-content: space-between; padding: 12px 4px 0; font-size: 0.85rem; color: var(--gray-mid); }
+        .viewer-info { display: flex; justify-content: space-between; align-items: center; padding: 12px 4px 0; font-size: 0.85rem; color: var(--gray-mid); }
         .viewer-info .filename { font-weight: 600; color: var(--teal); }
-        .viewer-reset { background: none; border: 0; color: var(--gray-mid); cursor: pointer; font-size: 0.85rem; text-decoration: underline; padding: 0; }
         .viewer-hint { position: absolute; bottom: 8px; left: 12px; font-size: 0.75rem; color: var(--gray-mid); background: rgba(255,255,255,0.8); padding: 4px 10px; border-radius: 12px; }
+        .viewer-empty { display: flex; align-items: center; justify-content: center; color: var(--gray-mid); font-size: 0.9rem; height: 100%; padding: 24px; text-align: center; }
 
-        /* Configurator */
-        .config-title { font-family: var(--font-heading); font-size: 1.15rem; font-weight: 700; color: var(--teal); margin-bottom: 18px; }
-        .config-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-        .config-group { display: flex; flex-direction: column; }
+        /* Items list (per file) */
+        .items-list { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+        .item-card {
+            background: var(--gray-light);
+            border-radius: 12px;
+            padding: 16px;
+            border: 2px solid transparent;
+            transition: border-color var(--transition), background var(--transition);
+            cursor: pointer;
+        }
+        .item-card.active { border-color: var(--teal); background: var(--teal-bg); }
+        .item-card.error { border-color: #FF3B30; background: rgba(255,59,48,0.06); }
+        .item-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+        .item-head .filename {
+            font-weight: 600; color: var(--teal); font-size: 0.95rem;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px;
+        }
+        .item-head .meta { font-size: 0.78rem; color: var(--gray-mid); display: block; margin-top: 2px; font-weight: 400; }
+        .item-remove {
+            background: none; border: 0; color: var(--gray-mid);
+            font-size: 1.2rem; line-height: 1; cursor: pointer;
+            padding: 4px 8px; border-radius: 6px;
+            transition: color var(--transition), background var(--transition);
+        }
+        .item-remove:hover { color: #FF3B30; background: rgba(255,59,48,0.1); }
+        .item-config { display: grid; grid-template-columns: 1fr 1fr 1fr 80px; gap: 10px; }
+        @media (max-width: 600px) { .item-config { grid-template-columns: 1fr 1fr; } }
+        .item-config label { font-size: 0.72rem; font-weight: 600; color: var(--gray-dark); display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .item-config select, .item-config input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--white); font-family: var(--font-body); font-size: 0.88rem; box-sizing: border-box; transition: border-color var(--transition); }
+        .item-config select:focus, .item-config input:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 2px rgba(32,67,62,0.15); }
+        .item-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.85rem; }
+        .item-foot .per-unit { color: var(--gray-dark); }
+        .item-foot .item-total { font-weight: 700; color: var(--teal); font-size: 1rem; }
+        .item-warn { font-size: 0.78rem; color: #9C5700; margin-top: 8px; }
+        .item-warn.error { color: #9C1C14; }
+
+        .empty-state { text-align: center; padding: 30px 16px; color: var(--gray-mid); font-size: 0.9rem; }
+
+        /* Order summary (right column) */
+        .summary-title { font-family: var(--font-heading); font-size: 1.15rem; font-weight: 700; color: var(--teal); margin-bottom: 4px; }
+        .summary-sub { color: var(--gray-mid); font-size: 0.85rem; margin-bottom: 18px; }
+
+        .config-group { display: flex; flex-direction: column; margin-bottom: 14px; }
         .config-group label { font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; color: var(--black); }
         .config-group select, .config-group input { padding: 11px 13px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--font-body); font-size: 0.95rem; background: var(--white); transition: border-color var(--transition), box-shadow var(--transition); }
         .config-group select:focus, .config-group input:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(32,67,62,0.1); }
 
-        .stats { background: var(--gray-light); border-radius: 10px; padding: 14px 18px; margin: 18px 0; }
-        .stats-row { display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 4px; color: var(--gray-dark); }
+        .stats { background: var(--gray-light); border-radius: 10px; padding: 12px 16px; margin: 0 0 18px; }
+        .stats-row { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; color: var(--gray-dark); }
         .stats-row:last-child { margin-bottom: 0; }
         .stats-row b { color: var(--black); font-weight: 600; }
 
-        .price-block { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 18px; }
+        .price-block { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 4px; }
         .price-row { display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--gray-dark); margin-bottom: 6px; }
-        .price-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+        .price-row .label-sub { font-size: 0.78rem; color: var(--gray-mid); display: block; margin-top: 2px; }
+        .price-row.minimum { color: #9C5700; }
+        .price-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
         .price-total span:first-child { font-weight: 600; font-size: 1rem; }
         .price-total span:last-child { font-family: var(--font-heading); font-size: 1.8rem; font-weight: 700; color: var(--teal); }
-        .price-note { font-size: 0.75rem; color: var(--gray-mid); text-align: right; margin-top: 2px; }
+        .price-note { font-size: 0.78rem; color: var(--gray-mid); text-align: right; margin-top: 4px; }
 
         .order-btn { width: 100%; justify-content: center; font-size: 1rem; padding: 16px; margin-top: 16px; }
         .order-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
@@ -90,7 +134,7 @@
         /* Order modal */
         .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 2000; align-items: center; justify-content: center; padding: 20px; overflow-y: auto; }
         .modal-bg.open { display: flex; }
-        .modal { background: var(--white); border-radius: 16px; max-width: 540px; width: 100%; padding: 32px; max-height: 90vh; overflow-y: auto; }
+        .modal { background: var(--white); border-radius: 16px; max-width: 560px; width: 100%; padding: 32px; max-height: 90vh; overflow-y: auto; }
         .modal h2 { margin-bottom: 6px; }
         .modal .subtitle { color: var(--gray-mid); margin-bottom: 22px; font-size: 0.9rem; }
         .modal .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -103,9 +147,12 @@
         .modal .checkbox input { width: auto; margin: 3px 0 0; padding: 0; }
         .modal-buttons { display: flex; gap: 12px; }
         .modal-buttons .btn { flex: 1; justify-content: center; }
-        .modal .summary { background: var(--teal-bg); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; font-size: 0.88rem; }
-        .modal .summary .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-        .modal .summary .row:last-child { margin-bottom: 0; padding-top: 6px; border-top: 1px solid rgba(32,67,62,0.2); margin-top: 6px; font-weight: 700; color: var(--teal); }
+        .modal .summary { background: var(--teal-bg); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; font-size: 0.85rem; }
+        .modal .summary .row { display: flex; justify-content: space-between; margin-bottom: 4px; gap: 12px; }
+        .modal .summary .row.total { padding-top: 6px; border-top: 1px solid rgba(32,67,62,0.2); margin-top: 6px; font-weight: 700; color: var(--teal); margin-bottom: 0; }
+        .modal .summary .row .col-file { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .modal .summary .row .col-price { white-space: nowrap; font-weight: 600; }
+        .modal .summary .group-head { font-weight: 700; color: var(--teal); margin-top: 8px; margin-bottom: 4px; }
 
         .loader { display: none; text-align: center; padding: 40px 20px; }
         .loader.show { display: block; }
@@ -153,93 +200,66 @@
             <div class="calc-intro">
                 <span class="section-label">Instant offerte</span>
                 <h1>Upload, bekijk, reken af</h1>
-                <p>Upload je STL-bestand, bekijk het in 3D, kies je materiaal en reken direct af. Wij printen en versturen het voor je. Minimale orderwaarde &euro;25.</p>
+                <p>Upload &eacute;&eacute;n of meerdere STL/3MF bestanden, kies per file je materiaal en kleur, en zie direct de prijs per artikel &eacute;n het ordertotaal. Minimale orderwaarde &euro;25.</p>
             </div>
 
             <div class="calc-grid">
 
-                <!-- Viewer -->
+                <!-- Left column: viewer + items list -->
                 <div class="calc-card viewer-wrap">
+
+                    <!-- Big dropzone (visible when no files yet) -->
                     <label for="fileInput" class="dropzone" id="dropzone">
                         <svg class="dropzone-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                             <polyline points="17 8 12 3 7 8"/>
                             <line x1="12" y1="3" x2="12" y2="15"/>
                         </svg>
-                        <h3>Sleep je STL of 3MF hierheen of klik</h3>
-                        <p>STL/3MF bestanden, max 6 MB. Bambu 3MF? Dan gebruiken we de exacte printtijd.<br>Grotere bestanden: mail info@cvlsolutions.nl.</p>
-                        <input type="file" id="fileInput" accept=".stl,.3mf">
+                        <h3>Sleep je STL of 3MF bestanden hierheen of klik</h3>
+                        <p>Meerdere bestanden tegelijk mag. STL/3MF, max 25 MB per bestand. Bambu 3MF? Dan gebruiken we de exacte printtijd.<br>Grotere bestanden: mail info@cvlsolutions.nl.</p>
+                        <input type="file" id="fileInput" accept=".stl,.3mf" multiple>
                     </label>
 
-                    <div id="viewer" style="display:none; margin-top: 16px;">
+                    <!-- 3D viewer (visible once a file is selected) -->
+                    <div id="viewer" style="display:none;">
                         <span class="viewer-hint">Sleep om te draaien &middot; scroll om te zoomen</span>
                     </div>
 
                     <div class="viewer-info" id="viewerInfo" style="display:none;">
                         <span><span class="filename" id="fileName">-</span> &middot; <span id="fileSize">-</span></span>
-                        <button type="button" class="viewer-reset" id="resetBtn">Ander bestand</button>
+                        <span id="viewerCount" style="font-size: 0.78rem; color: var(--gray-mid);"></span>
                     </div>
 
                     <div class="warn" id="warn"></div>
+
+                    <!-- Items list (per uploaded file) -->
+                    <div class="items-list" id="itemsList"></div>
+
+                    <!-- Compact "voeg bestand toe" dropzone (visible once at least one file is loaded) -->
+                    <label for="fileInputAdd" class="dropzone compact" id="dropzoneAdd" style="display:none; margin-top: 14px;">
+                        <svg class="dropzone-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        <h3>Voeg nog een bestand toe</h3>
+                        <p>STL of 3MF, max 25 MB per bestand. Of sleep er meerdere tegelijk in.</p>
+                        <input type="file" id="fileInputAdd" accept=".stl,.3mf" multiple>
+                    </label>
                 </div>
 
-                <!-- Configurator -->
+                <!-- Right column: order summary -->
                 <div class="calc-card">
-                    <div class="config-title">Configuratie</div>
+                    <div class="summary-title">Ordertotaal</div>
+                    <div class="summary-sub" id="summarySub">Upload een bestand om te beginnen.</div>
 
-                    <div class="config-row">
-                        <div class="config-group">
-                            <label>Materiaal</label>
-                            <select id="material">
-                                <option value="PLA">PLA &ndash; &euro;20/kg</option>
-                                <option value="PLA+">PLA+ &ndash; &euro;24/kg</option>
-                                <option value="PETG">PETG &ndash; &euro;25/kg</option>
-                                <option value="ABS">ABS &ndash; &euro;22/kg</option>
-                                <option value="ASA">ASA &ndash; &euro;30/kg</option>
-                                <option value="TPU">TPU &ndash; &euro;35/kg</option>
-                                <option value="Wood PLA">Wood PLA &ndash; &euro;28/kg</option>
-                                <option value="Carbon PLA">Carbon PLA &ndash; &euro;40/kg</option>
-                                <option value="Nylon">Nylon &ndash; &euro;45/kg</option>
-                                <option value="PC">PC &ndash; &euro;50/kg</option>
-                            </select>
-                        </div>
-                        <div class="config-group">
-                            <label>Infill</label>
-                            <select id="infill">
-                                <option value="0.10">10% &ndash; licht</option>
-                                <option value="0.20" selected>20% &ndash; standaard</option>
-                                <option value="0.40">40% &ndash; stevig</option>
-                                <option value="0.70">70% &ndash; zeer sterk</option>
-                                <option value="1.00">100% &ndash; massief</option>
-                            </select>
-                        </div>
+                    <div class="stats">
+                        <div class="stats-row"><span>Aantal bestanden</span><b id="statFiles">0</b></div>
+                        <div class="stats-row"><span>Totaal artikelen</span><b id="statItems">0</b></div>
+                        <div class="stats-row"><span>Totaal gewicht</span><b id="statWeight">&ndash;</b></div>
+                        <div class="stats-row"><span>Totaal printtijd</span><b id="statTime">&ndash;</b></div>
                     </div>
 
-                    <div class="config-row">
-                        <div class="config-group">
-                            <label>Kleur</label>
-                            <select id="color">
-                                <option value="Zwart">Zwart</option>
-                                <option value="Wit">Wit</option>
-                                <option value="Grijs">Grijs</option>
-                                <option value="Rood">Rood</option>
-                                <option value="Blauw">Blauw</option>
-                                <option value="Groen">Groen</option>
-                                <option value="Geel">Geel</option>
-                                <option value="Oranje">Oranje</option>
-                                <option value="Transparant">Transparant</option>
-                                <option value="Goud">Goud</option>
-                                <option value="Zilver">Zilver</option>
-                                <option value="Advies">In overleg</option>
-                            </select>
-                        </div>
-                        <div class="config-group">
-                            <label>Aantal</label>
-                            <input type="number" id="quantity" min="1" max="500" value="1">
-                        </div>
-                    </div>
-
-                    <div class="config-group" style="margin-bottom: 14px;">
+                    <div class="config-group">
                         <label>Verzending</label>
                         <select id="shipping">
                             <option value="NL">Nederland &ndash; &euro;3,95 (gratis &ge; &euro;50)</option>
@@ -248,13 +268,9 @@
                         </select>
                     </div>
 
-                    <div class="stats">
-                        <div class="stats-row"><span>Gewicht</span><b id="statWeight">&ndash;</b></div>
-                        <div class="stats-row"><span>Printtijd (schatting)</span><b id="statTime">&ndash;</b></div>
-                        <div class="stats-row"><span>Afmetingen</span><b id="statDims">&ndash;</b></div>
-                    </div>
-
                     <div class="price-block">
+                        <div class="price-row"><span>Subtotaal artikelen</span><span id="priceItems">&euro;0,00</span></div>
+                        <div class="price-row minimum" id="priceMinRow" style="display:none;"><span>Minimum &euro;25 aanvulling</span><span id="priceMin">&euro;0,00</span></div>
                         <div class="price-row"><span>Subtotaal (excl. BTW)</span><span id="priceSub">&euro;0,00</span></div>
                         <div class="price-row"><span>BTW 21%</span><span id="priceVat">&euro;0,00</span></div>
                         <div class="price-row"><span>Verzending</span><span id="priceShipping">&euro;0,00</span></div>
@@ -376,6 +392,6 @@
     </footer>
 
     <script src="js/main.js"></script>
-    <script type="module" src="js/calculator.js?v=10"></script>
+    <script type="module" src="js/calculator.js?v=13"></script>
 </body>
 </html>

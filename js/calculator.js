@@ -9,8 +9,8 @@ const SETTINGS = {
     printRate: 1.50,            // €/uur machine
     margin: 0.50,               // 50% marge (dekt overhead)
     vat: 0.21,                  // 21%
-    minPriceIncVat: 25.00,      // minimum product-totaal (excl. verzending)
-    freeShippingThreshold: 50,  // gratis verzending boven dit product-totaal
+    minPriceIncVat: 25.00,      // minimum order-totaal (artikelen incl BTW, zonder verzending)
+    freeShippingThreshold: 50,  // gratis verzending boven dit ordertotaal
 };
 
 const FILAMENTS = {
@@ -26,11 +26,22 @@ const FILAMENTS = {
     'PC':         { priceKg: 50, density: 1.20 },
 };
 
+const MATERIAL_KEYS = Object.keys(FILAMENTS);
+const COLOR_OPTIONS = ['Zwart', 'Wit', 'Grijs', 'Rood', 'Blauw', 'Groen', 'Geel', 'Oranje', 'Transparant', 'Goud', 'Zilver', 'Advies'];
+const INFILL_OPTIONS = [
+    { value: 0.10, label: '10% – licht' },
+    { value: 0.20, label: '20% – standaard' },
+    { value: 0.40, label: '40% – stevig' },
+    { value: 0.70, label: '70% – zeer sterk' },
+    { value: 1.00, label: '100% – massief' },
+];
+
 // Verzending per zone (incl BTW). Gratis boven freeShippingThreshold.
 const SHIPPING = { NL: 3.95, BE: 5.95, EU: 7.95 };
 
 const PRINT_BED_MM = 256; // Bambu P1S
-const MAX_FILE_MB = 6; // Netlify Functions v2 accepts ~10MB body; base64 overhead ~33%
+const MAX_FILE_MB = 25;
+const MAX_FILES = 20; // sanity cap to keep payload under Netlify Function body limit
 
 // ---------- STL analysis ----------
 function computeVolumeMm3(geometry) {
@@ -59,9 +70,7 @@ function computeVolumeMm3(geometry) {
     return Math.abs(volume);
 }
 
-// Custom 3MF parser: opens the zip and reads mesh XML directly.
-// Three.js stock 3MFLoader fails on Bambu's structure (components without direct mesh refs);
-// this parser walks every .model file inside the 3MF and unions all geometry.
+// Custom 3MF parser (same as before — Three's 3MFLoader fails on Bambu's structure).
 function parse3MFToGeometry(arrayBuffer) {
     const uint8 = new Uint8Array(arrayBuffer);
     const unzipped = unzipSync(uint8, {
@@ -71,7 +80,6 @@ function parse3MFToGeometry(arrayBuffer) {
         },
     });
 
-    // Collect all model XML files. Bambu puts per-object meshes in subfolders.
     const modelFiles = [];
     for (const name in unzipped) {
         if (name.toLowerCase().endsWith('.model')) {
@@ -80,8 +88,6 @@ function parse3MFToGeometry(arrayBuffer) {
     }
     if (modelFiles.length === 0) throw new Error('Geen 3D-model XML gevonden in 3MF archief.');
 
-    // Prefer the canonical 3dmodel.model; but if it only contains build-instructions
-    // (Bambu-style, with <component> refs), we also need to parse the referenced .model files.
     modelFiles.sort((a, b) => {
         const aMain = a.name.toLowerCase().includes('3dmodel.model') ? 0 : 1;
         const bMain = b.name.toLowerCase().includes('3dmodel.model') ? 0 : 1;
@@ -110,7 +116,6 @@ function parse3MFToGeometry(arrayBuffer) {
         const meshNodes = doc.getElementsByTagName('mesh');
         for (const mesh of meshNodes) {
             objectCount++;
-            // Vertices
             const vertexEls = mesh.getElementsByTagName('vertex');
             const vertStart = indexOffset;
             for (const v of vertexEls) {
@@ -121,7 +126,6 @@ function parse3MFToGeometry(arrayBuffer) {
                 );
                 indexOffset++;
             }
-            // Triangles
             const triangleEls = mesh.getElementsByTagName('triangle');
             for (const t of triangleEls) {
                 allIndices.push(
@@ -134,22 +138,18 @@ function parse3MFToGeometry(arrayBuffer) {
         }
     }
 
-    console.log('[3MF] parsed', objectCount, 'mesh(es),', allVertices.length / 3, 'vertices,', triangleCount, 'triangles');
-
     if (triangleCount === 0 || allVertices.length === 0) {
         throw new Error('3MF bevat geen driehoek-geometrie');
     }
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(allVertices), 3));
-    // Use 32-bit index if vertex count exceeds 65k
     const IndexArray = (allVertices.length / 3) > 65535 ? Uint32Array : Uint16Array;
     geometry.setIndex(new THREE.BufferAttribute(new IndexArray(allIndices), 1));
     geometry.computeVertexNormals();
     return geometry;
 }
 
-// Parse Bambu Studio .3mf zip for exact print_time / filament metadata
 function parse3MFBambuMetadata(arrayBuffer) {
     try {
         const uint8 = new Uint8Array(arrayBuffer);
@@ -194,62 +194,18 @@ function estimatePrintHours(volumeCm3, infill = 0.20) {
     return (baseMin + volumeCm3 * perCm3Min) / 60;
 }
 
-// ---------- Pricing ----------
-// Simpel lineair model: native per stuk = (materiaal + print) × marge × BTW.
-// Totaal = native × quantity. Minimum €25 is all-in (verzending gratis).
-// De marge dekt overhead (post-processing, packaging, verzending).
-function calculatePrice({ weightG, printHours, quantity, filamentName, shippingZone }) {
+// ---------- Pricing (per item — native, geen minimum op item-niveau) ----------
+function calculateItemPrice({ weightG, printHours, quantity, filamentName }) {
     const filament = FILAMENTS[filamentName];
-
     const materialCost = (weightG / 1000) * filament.priceKg * SETTINGS.materialEfficiency;
     const printCost = printHours * SETTINGS.printRate;
     const perStukCostExVat = materialCost + printCost;
-
-    // Native verkoopprijs per stuk
     const perStukExVat = perStukCostExVat * (1 + SETTINGS.margin);
-    const perStukIncVat = perStukExVat * (1 + SETTINGS.vat);
-
-    // Product-totaal (native × qty), minimum €25 op product-niveau
-    const totalNative = perStukIncVat * quantity;
-    const productIncVat = Math.max(totalNative, SETTINGS.minPriceIncVat);
-    const minKicksIn = totalNative < SETTINGS.minPriceIncVat;
-    const perUnit = productIncVat / quantity;
-
-    // Verzending: gratis boven threshold, anders zone-prijs
-    const shippingCost = productIncVat >= SETTINGS.freeShippingThreshold
-        ? 0
-        : (SHIPPING[shippingZone] || SHIPPING.EU);
-
-    // Eindbedrag = product + verzending
-    const totalIncVat = productIncVat + shippingCost;
-    const subtotalIncVat = productIncVat;
-    const subtotalExVat = subtotalIncVat / (1 + SETTINGS.vat);
-    const vatAmount = subtotalIncVat - subtotalExVat;
-
-    // Break-even: hoeveel stuks nodig om uit de min te komen?
-    let breakEvenQty = null;
-    let breakEvenPrice = null;
-    if (perStukIncVat > 0 && minKicksIn) {
-        breakEvenQty = Math.ceil(SETTINGS.minPriceIncVat / perStukIncVat);
-        if (breakEvenQty > quantity) {
-            breakEvenPrice = perStukIncVat * breakEvenQty;
-        } else {
-            breakEvenQty = null;
-        }
-    }
-
+    const perUnitIncVat = perStukExVat * (1 + SETTINGS.vat);
+    const itemSubtotalIncVat = perUnitIncVat * quantity;
     return {
-        perUnitIncVat: perUnit,
-        nativePerUnitIncVat: perStukIncVat,
-        productIncVat,
-        subtotal: subtotalExVat,
-        vat: vatAmount,
-        subtotalIncVat,
-        shipping: shippingCost,
-        totalIncVat,
-        minKicksIn,
-        breakEvenQty,
-        breakEvenPrice,
+        perUnitIncVat,
+        itemSubtotalIncVat,
         breakdown: {
             materialCost,
             printCost,
@@ -258,14 +214,37 @@ function calculatePrice({ weightG, printHours, quantity, filamentName, shippingZ
     };
 }
 
+// Order-niveau: som van items, min €25 op artikel-subtotaal (vóór verzending), verzending erbij.
+function calculateOrderPrice(items, shippingZone) {
+    const itemsSubtotalNativeIncVat = items.reduce((sum, it) => sum + (it.price ? it.price.itemSubtotalIncVat : 0), 0);
+    const subtotalIncVat = Math.max(itemsSubtotalNativeIncVat, SETTINGS.minPriceIncVat);
+    const minimumApplied = subtotalIncVat - itemsSubtotalNativeIncVat;
+    const subtotalExVat = subtotalIncVat / (1 + SETTINGS.vat);
+    const vatAmount = subtotalIncVat - subtotalExVat;
+
+    const shippingCost = subtotalIncVat >= SETTINGS.freeShippingThreshold
+        ? 0
+        : (SHIPPING[shippingZone] || SHIPPING.EU);
+
+    const totalIncVat = subtotalIncVat + shippingCost;
+
+    return {
+        itemsSubtotalNativeIncVat,
+        minimumApplied,
+        subtotalIncVat,
+        subtotalExVat,
+        vatAmount,
+        shipping: shippingCost,
+        totalIncVat,
+    };
+}
+
 // ---------- Formatters ----------
 const fmtEuro = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
 const fmtNum = (n, d = 1) => Number(n).toFixed(d).replace('.', ',');
 
-// ---------- Viewer state ----------
+// ---------- Viewer state (one shared viewer; previews the active item) ----------
 let renderer, scene, camera, controls, meshObj;
-let currentFile = null;
-let currentAnalysis = null;
 
 function initViewer() {
     const el = document.getElementById('viewer');
@@ -273,7 +252,7 @@ function initViewer() {
 
     const rect = el.getBoundingClientRect();
     const width = rect.width || el.clientWidth || 500;
-    const height = el.clientHeight || 420;
+    const height = el.clientHeight || 380;
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -306,7 +285,7 @@ function onResize() {
     if (!renderer) return;
     const el = document.getElementById('viewer');
     const w = el.clientWidth;
-    const h = el.clientHeight || 420;
+    const h = el.clientHeight || 380;
     renderer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -334,6 +313,7 @@ function disposeViewerObject() {
 }
 
 function loadGeometryIntoViewer(geometry) {
+    if (!renderer) initViewer();
     disposeViewerObject();
     geometry.computeVertexNormals();
     geometry.center();
@@ -362,279 +342,448 @@ function frameToObject(bb) {
     controls.update();
 }
 
-// ---------- File handling ----------
-async function handleFile(file) {
-    clearWarn();
-    if (!file) return;
+// ---------- Multi-item state ----------
+// Each item: { id, file, geometry (cached for re-preview), analysis, config, derived, price, warns: [] }
+const state = {
+    items: [],
+    activeId: null,
+    nextId: 1,
+};
 
+function uid() { return 'item_' + (state.nextId++); }
+
+// ---------- File ingestion ----------
+async function handleFiles(fileList) {
+    clearGlobalWarn();
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+
+    let added = 0;
+    for (const file of files) {
+        if (state.items.length >= MAX_FILES) {
+            showGlobalWarn(`Maximum ${MAX_FILES} bestanden per bestelling. Mail info@cvlsolutions.nl voor grotere orders.`, 'error');
+            break;
+        }
+        const ok = await ingestFile(file);
+        if (ok) added++;
+    }
+
+    // After ingest, if we have items, hide big dropzone and show compact one
+    if (state.items.length > 0) {
+        document.getElementById('dropzone').style.display = 'none';
+        document.getElementById('dropzoneAdd').style.display = 'flex';
+        document.getElementById('viewer').style.display = 'block';
+        document.getElementById('viewerInfo').style.display = 'flex';
+        // Activate the most recently added item if nothing active
+        if (!state.activeId && added > 0) {
+            const lastValid = [...state.items].reverse().find(i => i.analysis);
+            if (lastValid) setActiveItem(lastValid.id);
+        }
+    }
+
+    render();
+    recalc();
+
+    // Reset file input so re-selecting the same file works
+    document.getElementById('fileInput').value = '';
+    const addInp = document.getElementById('fileInputAdd');
+    if (addInp) addInp.value = '';
+}
+
+async function ingestFile(file) {
     const lower = file.name.toLowerCase();
     const isStl = lower.endsWith('.stl');
     const is3mf = lower.endsWith('.3mf');
     const sizeMb = file.size / (1024 * 1024);
-    console.log(`[upload] file="${file.name}" size=${file.size} bytes (${sizeMb.toFixed(2)} MB) limit=${MAX_FILE_MB} MB`);
 
     if (!isStl && !is3mf) {
-        showWarn('Alleen STL en 3MF bestanden worden ondersteund.', 'error');
-        return;
+        showGlobalWarn(`"${file.name}": alleen STL en 3MF worden ondersteund.`, 'error');
+        return false;
     }
     if (file.size > MAX_FILE_MB * 1024 * 1024) {
-        showWarn(`Bestand is ${sizeMb.toFixed(1)} MB; max is ${MAX_FILE_MB} MB voor directe bestelling. Mail het bestand direct naar info@cvlsolutions.nl, dan sturen we een betaallink.`, 'error');
+        showGlobalWarn(`"${file.name}": ${sizeMb.toFixed(1)} MB is groter dan max ${MAX_FILE_MB} MB. Mail info@cvlsolutions.nl voor een handmatige offerte.`, 'error');
+        return false;
+    }
+
+    const item = {
+        id: uid(),
+        file,
+        geometry: null,
+        analysis: null,
+        config: { material: 'PLA', infill: 0.20, color: 'Zwart', quantity: 1 },
+        derived: null,
+        price: null,
+        warns: [],
+        error: null,
+    };
+    state.items.push(item);
+
+    try {
+        const buffer = await file.arrayBuffer();
+        let volumeMm3, dims, bambuMeta = null, exactPrintTimeHours = null, geometry;
+
+        if (isStl) {
+            const loader = new STLLoader();
+            geometry = loader.parse(buffer);
+            volumeMm3 = computeVolumeMm3(geometry);
+            if (!isFinite(volumeMm3) || volumeMm3 <= 0) {
+                throw new Error('Kon geen geldig volume berekenen uit dit STL.');
+            }
+            geometry.computeBoundingBox();
+            const bb = geometry.boundingBox;
+            dims = { x: bb.max.x - bb.min.x, y: bb.max.y - bb.min.y, z: bb.max.z - bb.min.z };
+        } else {
+            geometry = parse3MFToGeometry(buffer);
+            volumeMm3 = computeVolumeMm3(geometry);
+            if (!isFinite(volumeMm3) || volumeMm3 <= 0) {
+                throw new Error('Kon geen geldig volume berekenen uit dit 3MF.');
+            }
+            geometry.computeBoundingBox();
+            const bb = geometry.boundingBox;
+            dims = { x: bb.max.x - bb.min.x, y: bb.max.y - bb.min.y, z: bb.max.z - bb.min.z };
+            bambuMeta = parse3MFBambuMetadata(buffer);
+            if (bambuMeta && bambuMeta.printTimeHours) {
+                exactPrintTimeHours = bambuMeta.printTimeHours;
+            }
+        }
+
+        item.geometry = geometry;
+        item.analysis = {
+            volumeMm3,
+            volumeCm3: volumeMm3 / 1000,
+            dims,
+            format: isStl ? 'stl' : '3mf',
+            exactPrintTimeHours,
+            bambuFilamentUsedG: bambuMeta ? bambuMeta.filamentUsedG : null,
+            bambuFilamentType: bambuMeta ? bambuMeta.filamentType : null,
+        };
+
+        // Per-item warnings
+        const maxSide = Math.max(dims.x, dims.y, dims.z);
+        const minSide = Math.min(dims.x, dims.y, dims.z);
+        if (maxSide > PRINT_BED_MM) item.warns.push(`Model is groter dan het printbed (${PRINT_BED_MM} mm). We splitsen het voor je of nemen contact op.`);
+        if (minSide < 5) item.warns.push('Model is erg klein (< 5 mm). Weet je zeker dat je verder wilt?');
+        if (exactPrintTimeHours) item.warns.push(`Exacte printtijd uit 3MF gebruikt (${exactPrintTimeHours.toFixed(2)} u).`);
+        return true;
+    } catch (e) {
+        console.error('[ingest] error parsing', file.name, e);
+        item.error = e.message || 'onbekende fout';
+        return false;
+    }
+}
+
+function removeItem(id) {
+    const idx = state.items.findIndex(i => i.id === id);
+    if (idx < 0) return;
+    state.items.splice(idx, 1);
+
+    if (state.activeId === id) {
+        // Pick another valid item as active, else hide viewer
+        const nextActive = state.items.find(i => i.analysis);
+        if (nextActive) {
+            setActiveItem(nextActive.id);
+        } else {
+            state.activeId = null;
+            disposeViewerObject();
+        }
+    }
+
+    if (state.items.length === 0) {
+        document.getElementById('dropzone').style.display = 'flex';
+        document.getElementById('dropzoneAdd').style.display = 'none';
+        document.getElementById('viewer').style.display = 'none';
+        document.getElementById('viewerInfo').style.display = 'none';
+    }
+
+    render();
+    recalc();
+}
+
+function setActiveItem(id) {
+    const item = state.items.find(i => i.id === id);
+    if (!item || !item.geometry) return;
+    state.activeId = id;
+
+    // Clone geometry into the viewer (Three centers it in place, so we use a clone to keep our cache pristine)
+    const geomClone = item.geometry.clone();
+    loadGeometryIntoViewer(geomClone);
+
+    // Update viewer info
+    document.getElementById('fileName').textContent = item.file.name;
+    document.getElementById('fileSize').textContent = (item.file.size / 1024 / 1024).toFixed(2) + ' MB';
+    document.getElementById('viewerCount').textContent = state.items.length > 1
+        ? `Bestand ${state.items.findIndex(i => i.id === id) + 1} van ${state.items.length}`
+        : '';
+
+    // Re-render item list to update .active highlight
+    render();
+}
+
+// ---------- Recalc all items + order totals ----------
+function recalc() {
+    // Compute per-item derived + price
+    for (const item of state.items) {
+        if (!item.analysis) {
+            item.derived = null;
+            item.price = null;
+            continue;
+        }
+        const filament = FILAMENTS[item.config.material];
+        const weightG = item.analysis.bambuFilamentUsedG
+            ? item.analysis.bambuFilamentUsedG
+            : estimateWeightG(item.analysis.volumeMm3, filament, item.config.infill);
+        const printHours = item.analysis.exactPrintTimeHours
+            ? item.analysis.exactPrintTimeHours
+            : estimatePrintHours(item.analysis.volumeCm3, item.config.infill);
+
+        const price = calculateItemPrice({
+            weightG,
+            printHours,
+            quantity: item.config.quantity,
+            filamentName: item.config.material,
+        });
+
+        item.derived = { weightG, printHours };
+        item.price = price;
+    }
+
+    const validItems = state.items.filter(i => i.price);
+    const shippingZone = document.getElementById('shipping').value;
+    const order = calculateOrderPrice(validItems, shippingZone);
+
+    // Update right-column summary UI
+    const fileCount = validItems.length;
+    const totalUnits = validItems.reduce((s, it) => s + it.config.quantity, 0);
+    const totalWeightG = validItems.reduce((s, it) => s + (it.derived.weightG * it.config.quantity), 0);
+    const totalHours = validItems.reduce((s, it) => s + (it.derived.printHours * it.config.quantity), 0);
+
+    document.getElementById('statFiles').textContent = fileCount;
+    document.getElementById('statItems').textContent = totalUnits;
+    document.getElementById('statWeight').textContent = fileCount > 0 ? `${fmtNum(totalWeightG, 0)} g` : '–';
+    if (fileCount > 0 && totalHours > 0) {
+        const hrs = Math.floor(totalHours);
+        const mins = Math.round((totalHours - hrs) * 60);
+        document.getElementById('statTime').textContent = `${hrs}u ${mins}m`;
+    } else {
+        document.getElementById('statTime').textContent = '–';
+    }
+
+    document.getElementById('priceItems').textContent = fmtEuro.format(order.itemsSubtotalNativeIncVat);
+
+    const minRow = document.getElementById('priceMinRow');
+    if (order.minimumApplied > 0.005) {
+        minRow.style.display = 'flex';
+        document.getElementById('priceMin').textContent = '+' + fmtEuro.format(order.minimumApplied);
+    } else {
+        minRow.style.display = 'none';
+    }
+
+    document.getElementById('priceSub').textContent = fmtEuro.format(order.subtotalExVat);
+    document.getElementById('priceVat').textContent = fmtEuro.format(order.vatAmount);
+    document.getElementById('priceShipping').textContent = order.shipping === 0 ? 'Gratis' : fmtEuro.format(order.shipping);
+    document.getElementById('priceTotal').textContent = fmtEuro.format(order.totalIncVat);
+
+    let note = '';
+    if (order.minimumApplied > 0.005) {
+        note = `Minimum orderwaarde &euro;25 toegepast (&euro;${order.minimumApplied.toFixed(2).replace('.', ',')} aanvulling).`;
+    } else if (order.shipping === 0 && order.subtotalIncVat >= SETTINGS.freeShippingThreshold) {
+        note = 'Gratis verzending toegepast (vanaf &euro;50 ordertotaal).';
+    } else if (fileCount > 0) {
+        note = 'Tip: gratis verzending vanaf &euro;50 ordertotaal.';
+    }
+    document.getElementById('priceNote').innerHTML = note;
+
+    document.getElementById('summarySub').textContent = fileCount === 0
+        ? 'Upload een bestand om te beginnen.'
+        : (fileCount === 1 ? '1 bestand klaar om te bestellen.' : `${fileCount} bestanden klaar om te bestellen.`);
+
+    document.getElementById('orderBtn').disabled = fileCount === 0;
+
+    // Stash full order data for the modal/submit
+    window.__lynk3d_order = {
+        items: validItems.map(it => ({
+            id: it.id,
+            file: it.file,
+            analysis: it.analysis,
+            config: { ...it.config },
+            derived: it.derived,
+            price: it.price,
+        })),
+        shipping: { zone: shippingZone, cost: order.shipping },
+        order,
+    };
+}
+
+// ---------- Item list rendering ----------
+function render() {
+    const list = document.getElementById('itemsList');
+    if (state.items.length === 0) {
+        list.innerHTML = '';
         return;
     }
 
-    currentFile = file;
-    document.getElementById('fileName').textContent = file.name;
-    document.getElementById('fileSize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+    list.innerHTML = state.items.map((item, idx) => {
+        const isActive = state.activeId === item.id;
+        const isError = !!item.error;
+        const klass = `item-card${isActive ? ' active' : ''}${isError ? ' error' : ''}`;
+        const sizeMb = (item.file.size / 1024 / 1024).toFixed(2);
+        const filename = escapeHtml(item.file.name);
 
-    const buffer = await file.arrayBuffer();
-
-    if (!renderer) initViewer();
-
-    let volumeMm3, dims, bambuMeta = null, exactPrintTimeHours = null;
-
-    if (isStl) {
-        let geometry;
-        try {
-            const loader = new STLLoader();
-            geometry = loader.parse(buffer);
-        } catch (e) {
-            showWarn('Kan dit bestand niet lezen. Is het een geldig STL?', 'error');
-            return;
+        if (isError) {
+            return `
+                <div class="${klass}" data-id="${item.id}">
+                    <div class="item-head">
+                        <div>
+                            <div class="filename">${filename}</div>
+                            <span class="meta">${sizeMb} MB &middot; <span style="color: #9C1C14;">${escapeHtml(item.error)}</span></span>
+                        </div>
+                        <button type="button" class="item-remove" data-action="remove" data-id="${item.id}" aria-label="Verwijder">&times;</button>
+                    </div>
+                </div>`;
         }
 
-        volumeMm3 = computeVolumeMm3(geometry);
-        if (!isFinite(volumeMm3) || volumeMm3 <= 0) {
-            showWarn('Kon geen geldig volume berekenen uit dit STL-bestand.', 'error');
-            return;
-        }
+        const a = item.analysis;
+        const d = item.derived;
+        const p = item.price;
+        const metaTxt = `${sizeMb} MB &middot; ${fmtNum(a.volumeCm3, 1)} cm³ &middot; ${fmtNum(a.dims.x)}×${fmtNum(a.dims.y)}×${fmtNum(a.dims.z)} mm`;
 
-        geometry.computeBoundingBox();
-        const bb = geometry.boundingBox;
-        dims = { x: bb.max.x - bb.min.x, y: bb.max.y - bb.min.y, z: bb.max.z - bb.min.z };
+        const materialOpts = MATERIAL_KEYS.map(m =>
+            `<option value="${m}" ${item.config.material === m ? 'selected' : ''}>${m} – &euro;${FILAMENTS[m].priceKg}/kg</option>`
+        ).join('');
+        const colorOpts = COLOR_OPTIONS.map(c =>
+            `<option value="${c}" ${item.config.color === c ? 'selected' : ''}>${c === 'Advies' ? 'In overleg' : c}</option>`
+        ).join('');
+        const infillOpts = INFILL_OPTIONS.map(o =>
+            `<option value="${o.value}" ${Math.abs(item.config.infill - o.value) < 0.001 ? 'selected' : ''}>${o.label}</option>`
+        ).join('');
 
-        loadGeometryIntoViewer(geometry);
-    } else {
-        // 3MF: custom parser (direct zip + XML) — Three's 3MFLoader fails on Bambu.
-        let geometry;
-        try {
-            console.log('[3MF] starting custom parse, buffer size:', buffer.byteLength);
-            geometry = parse3MFToGeometry(buffer);
-        } catch (e) {
-            console.error('[3MF] parse failed:', e);
-            showWarn('Kan dit 3MF-bestand niet lezen: ' + (e.message || 'onbekende fout') + '. Exporteer het opnieuw vanuit je slicer of probeer een STL.', 'error');
-            return;
-        }
+        const perUnit = p.perUnitIncVat;
+        const totalUnit = p.itemSubtotalIncVat;
 
-        volumeMm3 = computeVolumeMm3(geometry);
-        if (!isFinite(volumeMm3) || volumeMm3 <= 0) {
-            showWarn('Kon geen geldig volume berekenen uit dit 3MF-bestand.', 'error');
-            return;
-        }
+        const warnHtml = item.warns.length
+            ? `<div class="item-warn">${item.warns.map(escapeHtml).join(' ')}</div>`
+            : '';
 
-        geometry.computeBoundingBox();
-        const bb = geometry.boundingBox;
-        if (!bb) {
-            showWarn('Geen afmetingen gevonden in 3MF-bestand.', 'error');
-            return;
-        }
-        dims = { x: bb.max.x - bb.min.x, y: bb.max.y - bb.min.y, z: bb.max.z - bb.min.z };
-
-        loadGeometryIntoViewer(geometry);
-
-        // Try to get exact Bambu print metadata
-        bambuMeta = parse3MFBambuMetadata(buffer);
-        console.log('[3MF] bambu metadata:', bambuMeta);
-        if (bambuMeta && bambuMeta.printTimeHours) {
-            exactPrintTimeHours = bambuMeta.printTimeHours;
-        }
-    }
-
-    currentAnalysis = {
-        volumeMm3,
-        volumeCm3: volumeMm3 / 1000,
-        dims,
-        format: isStl ? 'stl' : '3mf',
-        exactPrintTimeHours,
-        bambuFilamentUsedG: bambuMeta ? bambuMeta.filamentUsedG : null,
-        bambuFilamentType: bambuMeta ? bambuMeta.filamentType : null,
-    };
-
-    document.getElementById('viewerInfo').style.display = 'flex';
-    document.getElementById('dropzone').style.display = 'none';
-
-    // Warnings
-    const maxSide = Math.max(dims.x, dims.y, dims.z);
-    const minSide = Math.min(dims.x, dims.y, dims.z);
-    const warns = [];
-    if (maxSide > PRINT_BED_MM) warns.push(`Model is groter dan het printbed (${PRINT_BED_MM} mm). We splitsen het voor je op of nemen contact op.`);
-    if (minSide < 5) warns.push('Model is erg klein (< 5 mm). Weet je zeker dat je verder wilt?');
-    if (exactPrintTimeHours) warns.push(`Exacte printtijd uit 3MF gebruikt (${exactPrintTimeHours.toFixed(2)} u).`);
-    if (warns.length) showWarn(warns.join(' '), exactPrintTimeHours && warns.length === 1 ? 'warn' : 'warn');
-
-    recalc();
+        return `
+            <div class="${klass}" data-id="${item.id}" data-action="select">
+                <div class="item-head">
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="filename">${filename}</div>
+                        <span class="meta">${metaTxt}${d ? ` &middot; ${fmtNum(d.weightG, 0)} g/stuk` : ''}</span>
+                    </div>
+                    <button type="button" class="item-remove" data-action="remove" data-id="${item.id}" aria-label="Verwijder">&times;</button>
+                </div>
+                <div class="item-config">
+                    <div>
+                        <label>Materiaal</label>
+                        <select data-action="config" data-id="${item.id}" data-key="material">${materialOpts}</select>
+                    </div>
+                    <div>
+                        <label>Kleur</label>
+                        <select data-action="config" data-id="${item.id}" data-key="color">${colorOpts}</select>
+                    </div>
+                    <div>
+                        <label>Infill</label>
+                        <select data-action="config" data-id="${item.id}" data-key="infill">${infillOpts}</select>
+                    </div>
+                    <div>
+                        <label>Aantal</label>
+                        <input type="number" min="1" max="500" value="${item.config.quantity}" data-action="config" data-id="${item.id}" data-key="quantity">
+                    </div>
+                </div>
+                ${warnHtml}
+                <div class="item-foot">
+                    <span class="per-unit">${fmtEuro.format(perUnit)} per stuk incl. BTW</span>
+                    <span class="item-total">${fmtEuro.format(totalUnit)}</span>
+                </div>
+            </div>`;
+    }).join('');
 }
 
-function resetFile() {
-    currentFile = null;
-    currentAnalysis = null;
-    if (meshObj && scene) {
-        scene.remove(meshObj);
-        meshObj.geometry.dispose();
-        meshObj.material.dispose();
-        meshObj = null;
-    }
-    document.getElementById('viewer').style.display = 'none';
-    document.getElementById('viewerInfo').style.display = 'none';
-    document.getElementById('dropzone').style.display = 'block';
-    document.getElementById('fileInput').value = '';
-    clearWarn();
-    recalc();
+// ---------- Item list event handling (delegation) ----------
+function bindItemList() {
+    const list = document.getElementById('itemsList');
+    list.addEventListener('click', (e) => {
+        const removeBtn = e.target.closest('[data-action="remove"]');
+        if (removeBtn) {
+            e.stopPropagation();
+            removeItem(removeBtn.getAttribute('data-id'));
+            return;
+        }
+        const card = e.target.closest('.item-card');
+        if (card && !e.target.closest('select, input, button')) {
+            const id = card.getAttribute('data-id');
+            setActiveItem(id);
+        }
+    });
+    list.addEventListener('change', (e) => {
+        const el = e.target.closest('[data-action="config"]');
+        if (!el) return;
+        const id = el.getAttribute('data-id');
+        const key = el.getAttribute('data-key');
+        const item = state.items.find(i => i.id === id);
+        if (!item) return;
+        let val = el.value;
+        if (key === 'quantity') val = Math.max(1, Math.min(500, parseInt(val) || 1));
+        else if (key === 'infill') val = parseFloat(val);
+        item.config[key] = val;
+        recalc();
+        render();
+    });
+    list.addEventListener('input', (e) => {
+        // qty input also triggers on input for snappier UX
+        const el = e.target.closest('input[data-action="config"]');
+        if (!el || el.getAttribute('data-key') !== 'quantity') return;
+        const id = el.getAttribute('data-id');
+        const item = state.items.find(i => i.id === id);
+        if (!item) return;
+        const val = Math.max(1, Math.min(500, parseInt(el.value) || 1));
+        item.config.quantity = val;
+        recalc();
+        // Only re-render the affected card's total — skip full render to preserve focus
+        const card = el.closest('.item-card');
+        if (card && item.price) {
+            const totEl = card.querySelector('.item-total');
+            if (totEl) totEl.textContent = fmtEuro.format(item.price.itemSubtotalIncVat);
+        }
+    });
 }
 
-// ---------- UI wiring ----------
-function showWarn(msg, type = 'warn') {
+// ---------- Drag & drop wiring ----------
+function bindDropzones() {
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+    const fileInputAdd = document.getElementById('fileInputAdd');
+    const dropzoneAdd = document.getElementById('dropzoneAdd');
+
+    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+    fileInputAdd.addEventListener('change', (e) => handleFiles(e.target.files));
+
+    [dropzone, dropzoneAdd].forEach(dz => {
+        ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, (e) => {
+            e.preventDefault(); e.stopPropagation();
+            dz.classList.add('dragover');
+        }));
+        ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, (e) => {
+            e.preventDefault(); e.stopPropagation();
+            dz.classList.remove('dragover');
+        }));
+        dz.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+    });
+
+    document.getElementById('shipping').addEventListener('change', recalc);
+}
+
+// ---------- Warnings ----------
+function showGlobalWarn(msg, type = 'warn') {
     const el = document.getElementById('warn');
     el.textContent = msg;
     el.className = 'warn show ' + (type === 'error' ? 'error' : '');
 }
-function clearWarn() {
+function clearGlobalWarn() {
     const el = document.getElementById('warn');
     el.textContent = '';
     el.className = 'warn';
-}
-
-function recalc() {
-    const weightEl = document.getElementById('statWeight');
-    const timeEl = document.getElementById('statTime');
-    const dimsEl = document.getElementById('statDims');
-    const subEl = document.getElementById('priceSub');
-    const vatEl = document.getElementById('priceVat');
-    const shipEl = document.getElementById('priceShipping');
-    const totalEl = document.getElementById('priceTotal');
-    const noteEl = document.getElementById('priceNote');
-    const btn = document.getElementById('orderBtn');
-
-    if (!currentAnalysis) {
-        weightEl.textContent = '—';
-        timeEl.textContent = '—';
-        dimsEl.textContent = '—';
-        subEl.textContent = fmtEuro.format(0);
-        vatEl.textContent = fmtEuro.format(0);
-        shipEl.textContent = fmtEuro.format(0);
-        totalEl.textContent = fmtEuro.format(0);
-        noteEl.textContent = '';
-        btn.disabled = true;
-        return;
-    }
-
-    const material = document.getElementById('material').value;
-    const infill = parseFloat(document.getElementById('infill').value);
-    const quantity = Math.max(1, parseInt(document.getElementById('quantity').value || 1));
-    const shippingZone = document.getElementById('shipping').value;
-
-    const filament = FILAMENTS[material];
-    const weightG = currentAnalysis.bambuFilamentUsedG
-        ? currentAnalysis.bambuFilamentUsedG
-        : estimateWeightG(currentAnalysis.volumeMm3, filament, infill);
-    const printHours = currentAnalysis.exactPrintTimeHours
-        ? currentAnalysis.exactPrintTimeHours
-        : estimatePrintHours(currentAnalysis.volumeCm3, infill);
-
-    const price = calculatePrice({ weightG, printHours, quantity, filamentName: material, shippingZone });
-
-    weightEl.textContent = `${fmtNum(weightG, 0)} g` + (quantity > 1 ? ` × ${quantity}` : '');
-    const totalHours = printHours * quantity;
-    const hrs = Math.floor(totalHours);
-    const mins = Math.round((totalHours - hrs) * 60);
-    timeEl.textContent = `${hrs}u ${mins}m` + (quantity > 1 ? ` (${quantity}x)` : '');
-    dimsEl.textContent = `${fmtNum(currentAnalysis.dims.x)} × ${fmtNum(currentAnalysis.dims.y)} × ${fmtNum(currentAnalysis.dims.z)} mm`;
-
-    subEl.textContent = fmtEuro.format(price.subtotal);
-    vatEl.textContent = fmtEuro.format(price.vat);
-    shipEl.textContent = price.shipping === 0 ? 'Gratis' : fmtEuro.format(price.shipping);
-    totalEl.textContent = fmtEuro.format(price.totalIncVat);
-
-    let note = '';
-    if (price.minKicksIn && price.breakEvenQty && price.breakEvenQty > quantity) {
-        note = `Minimum orderwaarde &euro;25 toegepast. <b>Tip:</b> bij ${price.breakEvenQty} stuks krijg je ${price.breakEvenQty}× voor &euro;${price.breakEvenPrice.toFixed(2).replace('.', ',')}.`;
-    } else if (price.minKicksIn) {
-        note = 'Minimum orderwaarde €25 incl. BTW is toegepast';
-    } else if (price.shipping === 0 && price.productIncVat >= 50) {
-        note = 'Gratis verzending toegepast (vanaf €50 product-totaal)';
-    } else {
-        note = 'Tip: gratis verzending vanaf €50 product-totaal';
-    }
-    noteEl.innerHTML = note;
-
-    btn.disabled = false;
-
-    // Stash for order
-    window.__lynk3d_order = {
-        file: currentFile,
-        analysis: currentAnalysis,
-        config: { material, infill, quantity, shippingZone, color: document.getElementById('color').value },
-        derived: { weightG, printHours },
-        price,
-    };
-}
-
-function bindEvents() {
-    const fileInput = document.getElementById('fileInput');
-    const dropzone = document.getElementById('dropzone');
-    const resetBtn = document.getElementById('resetBtn');
-    const configInputs = ['material', 'infill', 'quantity', 'color', 'shipping'];
-
-    fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
-
-    ['dragenter', 'dragover'].forEach(ev => dropzone.addEventListener(ev, (e) => {
-        e.preventDefault(); e.stopPropagation();
-        dropzone.classList.add('dragover');
-    }));
-    ['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, (e) => {
-        e.preventDefault(); e.stopPropagation();
-        dropzone.classList.remove('dragover');
-    }));
-    dropzone.addEventListener('drop', (e) => {
-        const file = e.dataTransfer.files[0];
-        handleFile(file);
-    });
-
-    resetBtn.addEventListener('click', resetFile);
-    configInputs.forEach(id => {
-        document.getElementById(id).addEventListener('change', recalc);
-        document.getElementById(id).addEventListener('input', recalc);
-    });
-
-    document.getElementById('orderBtn').addEventListener('click', openOrderModal);
-    document.getElementById('cancelOrder').addEventListener('click', closeOrderModal);
-    document.getElementById('confirmOrder').addEventListener('click', submitOrder);
-    document.getElementById('orderModal').addEventListener('click', (e) => {
-        if (e.target.id === 'orderModal') closeOrderModal();
-    });
-}
-
-// ---------- Order modal ----------
-function openOrderModal() {
-    const data = window.__lynk3d_order;
-    if (!data) return;
-    const p = data.price;
-    document.getElementById('orderSummary').innerHTML = `
-        <div class="row"><span>Bestand</span><span>${escapeHtml(data.file.name)}</span></div>
-        <div class="row"><span>Materiaal</span><span>${escapeHtml(data.config.material)}, ${Math.round(data.config.infill * 100)}% infill, ${escapeHtml(data.config.color)}</span></div>
-        <div class="row"><span>Aantal</span><span>${data.config.quantity}</span></div>
-        <div class="row"><span>Totaal incl. BTW + verzending</span><span>${fmtEuro.format(p.totalIncVat)}</span></div>
-    `;
-    document.getElementById('orderModal').classList.add('open');
-    document.getElementById('orderForm').style.display = 'block';
-    document.getElementById('orderLoader').classList.remove('show');
-}
-
-function closeOrderModal() {
-    document.getElementById('orderModal').classList.remove('open');
-}
-
-function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
 function showModalWarn(msg) {
@@ -648,10 +797,74 @@ function clearModalWarn() {
     w.className = 'warn';
 }
 
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+// ---------- Order modal ----------
+function openOrderModal() {
+    const data = window.__lynk3d_order;
+    if (!data || !data.items.length) return;
+
+    const rows = data.items.map(it => `
+        <div class="row">
+            <span class="col-file" title="${escapeHtml(it.file.name)}">
+                ${escapeHtml(it.file.name)}
+                <span style="display:block; color: var(--gray-mid); font-size: 0.75rem; font-weight: 400;">
+                    ${escapeHtml(it.config.material)} &middot; ${escapeHtml(it.config.color)} &middot; ${Math.round(it.config.infill * 100)}% &middot; ${it.config.quantity}×
+                </span>
+            </span>
+            <span class="col-price">${fmtEuro.format(it.price.itemSubtotalIncVat)}</span>
+        </div>
+    `).join('');
+
+    const minRow = data.order.minimumApplied > 0.005
+        ? `<div class="row"><span>Minimum &euro;25 aanvulling</span><span>+${fmtEuro.format(data.order.minimumApplied)}</span></div>`
+        : '';
+    const shipRow = `<div class="row"><span>Verzending</span><span>${data.order.shipping === 0 ? 'Gratis' : fmtEuro.format(data.order.shipping)}</span></div>`;
+
+    document.getElementById('orderSummary').innerHTML = `
+        <div class="group-head">Je bestelling</div>
+        ${rows}
+        ${minRow}
+        ${shipRow}
+        <div class="row total"><span>Totaal incl. BTW</span><span>${fmtEuro.format(data.order.totalIncVat)}</span></div>
+    `;
+    document.getElementById('orderModal').classList.add('open');
+    document.getElementById('orderForm').style.display = 'block';
+    document.getElementById('orderLoader').classList.remove('show');
+}
+
+function closeOrderModal() {
+    document.getElementById('orderModal').classList.remove('open');
+}
+
+// ---------- Compression helpers ----------
+async function compressFileToBase64(file) {
+    const buf = await file.arrayBuffer();
+    if (typeof CompressionStream === 'undefined') {
+        const u8 = new Uint8Array(buf);
+        return { base64: bytesToBase64(u8), compressedBytes: u8.length, encoding: 'identity' };
+    }
+    const stream = new Blob([buf]).stream().pipeThrough(new CompressionStream('gzip'));
+    const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+    return { base64: bytesToBase64(compressed), compressedBytes: compressed.length, encoding: 'gzip' };
+}
+
+function bytesToBase64(u8) {
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < u8.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, u8.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+}
+
+// ---------- Submit order ----------
 async function submitOrder() {
     clearModalWarn();
     const data = window.__lynk3d_order;
-    if (!data) { showModalWarn('Geen bestand geladen.'); return; }
+    if (!data || !data.items.length) { showModalWarn('Geen bestanden geladen.'); return; }
 
     const firstName = document.getElementById('oFirstName').value.trim();
     const lastName = document.getElementById('oLastName').value.trim();
@@ -672,40 +885,64 @@ async function submitOrder() {
     document.getElementById('orderLoader').classList.add('show');
 
     try {
-        const stlBase64 = await fileToBase64(data.file);
+        // Compress all STL files in parallel
+        const compressedFiles = await Promise.all(
+            data.items.map(it => compressFileToBase64(it.file))
+        );
+
+        const itemsPayload = data.items.map((it, idx) => {
+            const c = compressedFiles[idx];
+            return {
+                filename: it.file.name,
+                sizeBytes: it.file.size,
+                base64: c.base64,
+                encoding: c.encoding,
+                compressedBytes: c.compressedBytes,
+                material: it.config.material,
+                color: it.config.color,
+                infill: it.config.infill,
+                quantity: it.config.quantity,
+                analysis: {
+                    volumeCm3: +it.analysis.volumeCm3.toFixed(2),
+                    dims: {
+                        x: +it.analysis.dims.x.toFixed(1),
+                        y: +it.analysis.dims.y.toFixed(1),
+                        z: +it.analysis.dims.z.toFixed(1),
+                    },
+                    format: it.analysis.format,
+                },
+                derived: {
+                    weightG: +it.derived.weightG.toFixed(1),
+                    printHours: +it.derived.printHours.toFixed(2),
+                },
+                price: {
+                    perUnitIncVat: +it.price.perUnitIncVat.toFixed(2),
+                    itemSubtotalIncVat: +it.price.itemSubtotalIncVat.toFixed(2),
+                    breakdown: {
+                        materialCost: +it.price.breakdown.materialCost.toFixed(4),
+                        printCost: +it.price.breakdown.printCost.toFixed(4),
+                        marginPct: it.price.breakdown.marginPct,
+                    },
+                },
+            };
+        });
+
+        const totalPayloadKb = compressedFiles.reduce((s, c) => s + c.compressedBytes, 0) / 1024;
+        console.log(`[upload] ${data.items.length} files, total gzip=${totalPayloadKb.toFixed(0)}KB`);
 
         const payload = {
-            customer: { firstName, lastName, name, email, phone, street, zip, city, country: data.config.shippingZone, notes },
-            config: data.config,
-            analysis: {
-                volumeCm3: +data.analysis.volumeCm3.toFixed(2),
-                dims: {
-                    x: +data.analysis.dims.x.toFixed(1),
-                    y: +data.analysis.dims.y.toFixed(1),
-                    z: +data.analysis.dims.z.toFixed(1),
-                },
-            },
-            derived: {
-                weightG: +data.derived.weightG.toFixed(1),
-                printHours: +data.derived.printHours.toFixed(2),
-            },
+            customer: { firstName, lastName, name, email, phone, street, zip, city, country: data.shipping.zone, notes },
+            items: itemsPayload,
+            shipping: { zone: data.shipping.zone, cost: +data.shipping.cost.toFixed(2) },
             price: {
-                subtotal: +data.price.subtotal.toFixed(2),
-                vat: +data.price.vat.toFixed(2),
-                shipping: +data.price.shipping.toFixed(2),
-                totalIncVat: +data.price.totalIncVat.toFixed(2),
-                breakdown: {
-                    materialCost: +data.price.breakdown.materialCost.toFixed(4),
-                    printCost: +data.price.breakdown.printCost.toFixed(4),
-                    laborCost: +data.price.breakdown.laborCost.toFixed(4),
-                    packagingCost: +data.price.breakdown.packagingCost.toFixed(4),
-                    marginPct: data.price.breakdown.marginPct,
-                },
-            },
-            stl: {
-                filename: data.file.name,
-                sizeBytes: data.file.size,
-                base64: stlBase64,
+                subtotalNativeExVat: +(data.order.itemsSubtotalNativeIncVat / (1 + SETTINGS.vat)).toFixed(2),
+                itemsSubtotalNativeIncVat: +data.order.itemsSubtotalNativeIncVat.toFixed(2),
+                minimumApplied: +data.order.minimumApplied.toFixed(2),
+                subtotalIncVat: +data.order.subtotalIncVat.toFixed(2),
+                subtotalExVat: +data.order.subtotalExVat.toFixed(2),
+                vat: +data.order.vatAmount.toFixed(2),
+                shipping: +data.order.shipping.toFixed(2),
+                totalIncVat: +data.order.totalIncVat.toFixed(2),
             },
         };
 
@@ -731,20 +968,18 @@ async function submitOrder() {
     }
 }
 
-function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => {
-            const result = r.result;
-            const comma = result.indexOf(',');
-            resolve(comma >= 0 ? result.slice(comma + 1) : result);
-        };
-        r.onerror = reject;
-        r.readAsDataURL(file);
+// ---------- Init ----------
+function bindEvents() {
+    bindDropzones();
+    bindItemList();
+    document.getElementById('orderBtn').addEventListener('click', openOrderModal);
+    document.getElementById('cancelOrder').addEventListener('click', closeOrderModal);
+    document.getElementById('confirmOrder').addEventListener('click', submitOrder);
+    document.getElementById('orderModal').addEventListener('click', (e) => {
+        if (e.target.id === 'orderModal') closeOrderModal();
     });
 }
 
-// ---------- Init ----------
 document.addEventListener('DOMContentLoaded', () => {
     bindEvents();
     recalc();

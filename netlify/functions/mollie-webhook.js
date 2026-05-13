@@ -67,9 +67,9 @@ export default async (req, context) => {
             if (order.type === 'product') {
                 await sendProductOrderEmail(order);
             } else {
-                const stlBuf = await stlStore.get(`${orderId}.stl`, { type: 'arrayBuffer' });
-                const stlBase64 = stlBuf ? Buffer.from(stlBuf).toString('base64') : null;
-                await sendOrderEmail(order, stlBase64);
+                // Multi-item or legacy single-file? Pull all STL blobs and attach them.
+                const stlAttachments = await loadStlAttachments(order, stlStore);
+                await sendOrderEmail(order, stlAttachments);
             }
             order.emailSent = true;
         } catch (e) {
@@ -155,21 +155,118 @@ async function sendViaRelay(subject, html, { to, replyTo, attachments } = {}) {
     }
 }
 
-// ---------- STL calculator order email ----------
-async function sendOrderEmail(order, stlBase64) {
+// ---------- Load STL attachments for an order ----------
+// Returns an array of { name, contentType, contentBase64 }, supporting both
+// new multi-item orders (items[].stl.blobKey) and legacy single-file orders
+// (one STL stored as `{orderId}.stl`).
+async function loadStlAttachments(order, stlStore) {
+    const attachments = [];
+
+    // Determine item list (normalize legacy → items[])
+    const items = Array.isArray(order.items) && order.items.length
+        ? order.items
+        : (order.stl
+            ? [{
+                filename: order.stl.filename,
+                sizeBytes: order.stl.sizeBytes,
+                stl: { filename: order.stl.filename, blobKey: order.stl.blobKey || `${order.orderId}.stl`, sizeBytes: order.stl.sizeBytes },
+            }]
+            : []);
+
+    for (const it of items) {
+        const blobKey = (it.stl && it.stl.blobKey) || `${order.orderId}.stl`;
+        try {
+            const buf = await stlStore.get(blobKey, { type: 'arrayBuffer' });
+            if (!buf) {
+                console.warn(`[email] STL blob missing: ${blobKey}`);
+                continue;
+            }
+            attachments.push({
+                name: it.filename || (it.stl && it.stl.filename) || blobKey,
+                contentType: (it.filename || '').toLowerCase().endsWith('.3mf')
+                    ? 'application/vnd.ms-3mfdocument'
+                    : 'application/vnd.ms-pki.stl',
+                contentBase64: Buffer.from(buf).toString('base64'),
+            });
+        } catch (e) {
+            console.warn(`[email] failed to load blob ${blobKey}:`, e);
+        }
+    }
+    return attachments;
+}
+
+// ---------- STL calculator order email (multi-item) ----------
+async function sendOrderEmail(order, stlAttachments) {
     const recipient = process.env.NOTIFICATION_EMAIL || 'info@cvlsolutions.nl';
     const c = order.customer;
-    const cfg = order.config;
-    const a = order.analysis;
-    const d = order.derived;
-    const p = order.price;
-    const b = p.breakdown || {};
+    const p = order.price || {};
+    const euro = (n) => '€' + Number(n || 0).toFixed(2).replace('.', ',');
 
-    const euro = (n) => '€' + Number(n).toFixed(2).replace('.', ',');
+    // Normalize items list (legacy single-file orders → wrap into items[])
+    const items = Array.isArray(order.items) && order.items.length
+        ? order.items
+        : (order.stl ? [{
+            filename: order.stl.filename,
+            sizeBytes: order.stl.sizeBytes,
+            material: order.config && order.config.material,
+            color: order.config && order.config.color,
+            infill: order.config && order.config.infill,
+            quantity: order.config && order.config.quantity,
+            analysis: order.analysis || {},
+            derived: order.derived || {},
+            price: {
+                perUnitIncVat: order.price && order.config
+                    ? (order.price.subtotalIncVat || order.price.totalIncVat) / Math.max(order.config.quantity || 1, 1)
+                    : 0,
+                itemSubtotalIncVat: order.price ? (order.price.subtotalIncVat ?? (order.price.totalIncVat - (order.price.shipping || 0))) : 0,
+                breakdown: order.price && order.price.breakdown || {},
+            },
+        }] : []);
+
+    const totalUnits = items.reduce((s, it) => s + (it.quantity || 0), 0);
+    const totalWeightG = items.reduce((s, it) => s + ((it.derived && it.derived.weightG ? it.derived.weightG : 0) * (it.quantity || 1)), 0);
+    const totalPrintHours = items.reduce((s, it) => s + ((it.derived && it.derived.printHours ? it.derived.printHours : 0) * (it.quantity || 1)), 0);
+
+    const itemRows = items.map((it, idx) => {
+        const a = it.analysis || {};
+        const d = it.derived || {};
+        const ip = it.price || {};
+        const dims = a.dims ? `${a.dims.x} × ${a.dims.y} × ${a.dims.z} mm` : '–';
+        return `
+            <tr>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee;">${idx + 1}</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee;">
+                    <b>${esc(it.filename)}</b>
+                    <div style="color:#888; font-size:0.85em;">${a.volumeCm3 != null ? a.volumeCm3 + ' cm³' : ''} ${dims !== '–' ? '· ' + dims : ''}</div>
+                </td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee;">${esc(it.material || '')}</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee;">${esc(it.color || '')}</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee;">${it.infill != null ? Math.round(it.infill * 100) + '%' : ''}</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${it.quantity || 1}×</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${d.weightG != null ? d.weightG + ' g' : '–'}</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${ip.perUnitIncVat != null ? euro(ip.perUnitIncVat) : '–'}</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;"><b>${ip.itemSubtotalIncVat != null ? euro(ip.itemSubtotalIncVat) : '–'}</b></td>
+            </tr>`;
+    }).join('');
+
+    // Internal breakdown (sum across items)
+    const totalMaterialCost = items.reduce((s, it) => s + ((it.price && it.price.breakdown && it.price.breakdown.materialCost) || 0) * (it.quantity || 1), 0);
+    const totalPrintCost = items.reduce((s, it) => s + ((it.price && it.price.breakdown && it.price.breakdown.printCost) || 0) * (it.quantity || 1), 0);
+    const marginPct = (items[0] && items[0].price && items[0].price.breakdown && items[0].price.breakdown.marginPct) || 0.5;
+
+    const minRow = (p.minimumApplied && p.minimumApplied > 0.005)
+        ? `<tr><td>Minimum &euro;25 aanvulling</td><td style="text-align:right;">+${euro(p.minimumApplied)}</td></tr>`
+        : '';
+
+    // For legacy orders without `subtotalExVat`, fall back to `subtotal`
+    const subEx = p.subtotalExVat != null ? p.subtotalExVat : (p.subtotal != null ? p.subtotal : 0);
+    const vat = p.vat || 0;
+    const shipping = p.shipping || 0;
+    const totalIncVat = p.totalIncVat || 0;
 
     const htmlBody = `
-        <div style="font-family: Arial, sans-serif; color: #1C1C1E; max-width: 600px;">
-            <h2 style="color: #20433e;">Nieuwe 3D-print bestelling</h2>
+        <div style="font-family: Arial, sans-serif; color: #1C1C1E; max-width: 760px;">
+            <h2 style="color: #20433e;">Nieuwe 3D-print bestelling (${items.length} bestand${items.length === 1 ? '' : 'en'})</h2>
             <p><b>Ordernummer:</b> ${order.orderId}<br>
                <b>Besteld op:</b> ${new Date(order.createdAt).toLocaleString('nl-NL')}<br>
                <b>Betaald op:</b> ${new Date(order.paidAt).toLocaleString('nl-NL')}<br>
@@ -187,72 +284,79 @@ async function sendOrderEmail(order, stlBase64) {
             </table>
             ${c.notes ? `<p style="margin-top: 12px;"><b>Opmerkingen:</b> ${esc(c.notes)}</p>` : ''}
 
-            <h3 style="color: #20433e;">Print</h3>
-            <table style="border-collapse: collapse; width: 100%;">
-                <tr><td><b>Bestand</b></td><td>${esc(order.stl.filename)} (${(order.stl.sizeBytes / 1024 / 1024).toFixed(2)} MB)</td></tr>
-                <tr><td><b>Materiaal</b></td><td>${esc(cfg.material)}</td></tr>
-                <tr><td><b>Kleur</b></td><td>${esc(cfg.color)}</td></tr>
-                <tr><td><b>Infill</b></td><td>${Math.round(cfg.infill * 100)}%</td></tr>
-                <tr><td><b>Aantal</b></td><td>${cfg.quantity}</td></tr>
-                <tr><td><b>Gewicht per stuk</b></td><td>${d.weightG} g</td></tr>
-                <tr><td><b>Printtijd per stuk</b></td><td>${d.printHours} u</td></tr>
-                <tr><td><b>Volume</b></td><td>${a.volumeCm3} cm³</td></tr>
-                <tr><td><b>Afmetingen</b></td><td>${a.dims.x} × ${a.dims.y} × ${a.dims.z} mm</td></tr>
+            <h3 style="color: #20433e;">Bestanden</h3>
+            <table style="border-collapse: collapse; width: 100%; font-size: 0.9em;">
+                <thead>
+                    <tr style="background:#f5f5f7;">
+                        <th style="padding:6px 8px; text-align:left;">#</th>
+                        <th style="padding:6px 8px; text-align:left;">Bestand</th>
+                        <th style="padding:6px 8px; text-align:left;">Materiaal</th>
+                        <th style="padding:6px 8px; text-align:left;">Kleur</th>
+                        <th style="padding:6px 8px; text-align:left;">Infill</th>
+                        <th style="padding:6px 8px; text-align:right;">Aantal</th>
+                        <th style="padding:6px 8px; text-align:right;">Gewicht/stuk</th>
+                        <th style="padding:6px 8px; text-align:right;">Per stuk</th>
+                        <th style="padding:6px 8px; text-align:right;">Totaal</th>
+                    </tr>
+                </thead>
+                <tbody>${itemRows}</tbody>
             </table>
+
+            <p style="margin-top:12px; font-size: 0.88em; color:#555;">
+                <b>Totaal artikelen:</b> ${totalUnits} &middot;
+                <b>Totaal gewicht:</b> ${totalWeightG.toFixed(0)} g &middot;
+                <b>Totaal printtijd:</b> ${formatHours(totalPrintHours)}
+            </p>
 
             <h3 style="color: #20433e;">Prijs</h3>
             <table style="border-collapse: collapse; width: 100%;">
-                <tr><td>Subtotaal (excl BTW)</td><td style="text-align:right;">${euro(p.subtotal)}</td></tr>
-                <tr><td>BTW 21%</td><td style="text-align:right;">${euro(p.vat)}</td></tr>
-                <tr><td>Verzending</td><td style="text-align:right;">${p.shipping === 0 ? 'Gratis' : euro(p.shipping)}</td></tr>
-                <tr><td><b>Totaal incl BTW</b></td><td style="text-align:right;"><b>${euro(p.totalIncVat)}</b></td></tr>
+                ${p.itemsSubtotalNativeIncVat != null ? `<tr><td>Artikelen subtotaal (incl BTW, native)</td><td style="text-align:right;">${euro(p.itemsSubtotalNativeIncVat)}</td></tr>` : ''}
+                ${minRow}
+                <tr><td>Subtotaal (excl BTW)</td><td style="text-align:right;">${euro(subEx)}</td></tr>
+                <tr><td>BTW 21%</td><td style="text-align:right;">${euro(vat)}</td></tr>
+                <tr><td>Verzending</td><td style="text-align:right;">${shipping === 0 ? 'Gratis' : euro(shipping)}</td></tr>
+                <tr><td><b>Totaal incl BTW</b></td><td style="text-align:right;"><b>${euro(totalIncVat)}</b></td></tr>
             </table>
 
-            <h3 style="color: #20433e;">Kosten-opbouw (intern)</h3>
+            <h3 style="color: #20433e;">Kosten-opbouw (intern, gesommeerd)</h3>
             <table style="border-collapse: collapse; width: 100%; font-size: 0.9em; color: #666;">
-                <tr><td>Materiaal</td><td style="text-align:right;">${euro(b.materialCost || 0)}</td></tr>
-                <tr><td>Print (machine)</td><td style="text-align:right;">${euro(b.printCost || 0)}</td></tr>
-                <tr><td>Labor (0,25u)</td><td style="text-align:right;">${euro(b.laborCost || 0)}</td></tr>
-                <tr><td>Packaging</td><td style="text-align:right;">${euro(b.packagingCost || 0)}</td></tr>
-                <tr><td>Marge toegepast</td><td style="text-align:right;">${Math.round((b.marginPct || 0) * 100)}%</td></tr>
+                <tr><td>Materiaal</td><td style="text-align:right;">${euro(totalMaterialCost)}</td></tr>
+                <tr><td>Print (machine)</td><td style="text-align:right;">${euro(totalPrintCost)}</td></tr>
+                <tr><td>Marge toegepast</td><td style="text-align:right;">${Math.round(marginPct * 100)}%</td></tr>
             </table>
 
             <p style="margin-top: 24px; color: #8E8E93; font-size: 0.85em;">
-                STL-bestand zit als bijlage bij deze e-mail.
+                ${stlAttachments && stlAttachments.length ? `${stlAttachments.length} bestand${stlAttachments.length === 1 ? '' : 'en'} zitten als bijlage bij deze e-mail.` : 'Geen bijlagen beschikbaar.'}
             </p>
         </div>
     `;
 
-    const attachments = [];
-    if (stlBase64) {
-        attachments.push({
-            name: order.stl.filename,
-            contentType: 'application/vnd.ms-pki.stl',
-            contentBase64: stlBase64,
-        });
-    }
-
     await sendViaRelay(
-        `LYNK 3D bestelling ${order.orderId} — ${euro(p.totalIncVat)}`,
+        `LYNK 3D bestelling ${order.orderId} — ${euro(totalIncVat)} (${items.length}× bestand)`,
         htmlBody,
         {
             to: recipient,
             replyTo: { address: c.email, name: fullName(c) },
-            attachments,
+            attachments: stlAttachments || [],
         },
     );
 
-    // Also send confirmation to the customer
+    // Customer confirmation
     try {
+        const customerItemRows = items.map(it => `
+            <li>
+                <b>${esc(it.filename)}</b> &mdash; ${esc(it.material || '')}, ${esc(it.color || '')}, ${it.infill != null ? Math.round(it.infill * 100) + '%' : ''} infill, ${it.quantity || 1}× &mdash; ${euro((it.price && it.price.itemSubtotalIncVat) || 0)}
+            </li>
+        `).join('');
+
         const customerHtml = `
             <div style="font-family: Arial, sans-serif; color: #1C1C1E;">
                 <h2 style="color: #20433e;">Bedankt voor je bestelling, ${esc(firstName(c))}!</h2>
                 <p>We hebben je betaling ontvangen en starten met produceren.</p>
                 <p><b>Ordernummer:</b> ${order.orderId}<br>
-                   <b>Bestand:</b> ${esc(order.stl.filename)}<br>
-                   <b>Materiaal:</b> ${esc(cfg.material)}, ${esc(cfg.color)}, ${Math.round(cfg.infill * 100)}% infill<br>
-                   <b>Aantal:</b> ${cfg.quantity}<br>
-                   <b>Totaal betaald:</b> ${euro(p.totalIncVat)}</p>
+                   <b>Totaal betaald:</b> ${euro(totalIncVat)}</p>
+                <p><b>Je bestelling (${items.length} bestand${items.length === 1 ? '' : 'en'}):</b></p>
+                <ul>${customerItemRows}</ul>
                 <p>Je ontvangt binnen 24 uur van ons een planning met de verwachte leverdatum. Gemiddelde doorlooptijd is 3-7 werkdagen.</p>
                 <p>Vragen? Antwoord gewoon op deze mail of bel/WhatsApp <a href="tel:+31613277621">06 1327 7621</a>.</p>
                 <p style="margin-top: 24px;">Hartelijke groet,<br><b>LYNK 3D Solutions</b><br>onderdeel van CVL Solutions</p>
@@ -265,8 +369,14 @@ async function sendOrderEmail(order, stlBase64) {
         );
     } catch (e) {
         console.warn('Customer confirmation email failed:', e);
-        // don't throw — internal email already sent
     }
+}
+
+function formatHours(h) {
+    if (!h || !isFinite(h)) return '–';
+    const hrs = Math.floor(h);
+    const mins = Math.round((h - hrs) * 60);
+    return `${hrs}u ${mins}m`;
 }
 
 function esc(s) {
@@ -316,16 +426,38 @@ async function sendTelegramAlert(order) {
             `Order: \`${order.orderId}\``,
         ].join('\n');
     } else {
-        // STL calculator order
-        const cfg = order.config || {};
-        const stl = order.stl || {};
-        const d = order.derived || {};
+        // STL calculator order (multi-item aware)
+        const items = Array.isArray(order.items) && order.items.length
+            ? order.items
+            : (order.stl ? [{
+                filename: order.stl.filename,
+                material: order.config && order.config.material,
+                color: order.config && order.config.color,
+                infill: order.config && order.config.infill,
+                quantity: order.config && order.config.quantity,
+                derived: order.derived || {},
+            }] : []);
+
+        const totalUnits = items.reduce((s, it) => s + (it.quantity || 1), 0);
+        const totalWeight = items.reduce((s, it) => s + ((it.derived && it.derived.weightG ? it.derived.weightG : 0) * (it.quantity || 1)), 0);
+        const totalHours = items.reduce((s, it) => s + ((it.derived && it.derived.printHours ? it.derived.printHours : 0) * (it.quantity || 1)), 0);
+
+        const header = items.length === 1
+            ? `🖨 *Nieuwe print-bestelling*`
+            : `🖨 *Nieuwe print-bestelling* (${items.length} bestanden)`;
+
+        const itemLines = items.slice(0, 6).map((it, idx) => {
+            const inf = it.infill != null ? Math.round(it.infill * 100) + '%' : '?';
+            return `${idx + 1}. *${escMd(it.filename || '?')}* — ${escMd(it.material || '?')}, ${escMd(it.color || '?')}, ${inf}, ${it.quantity || 1}×`;
+        });
+        if (items.length > 6) itemLines.push(`… +${items.length - 6} meer`);
+
         body = [
-            `🖨 *Nieuwe print-bestelling*`,
+            header,
             ``,
-            `*${escMd(stl.filename || 'STL')}* · ${d.weightG || '?'}g · ${d.printHours || '?'}u`,
-            `Materiaal: ${escMd(cfg.material || '?')} · Kleur: ${escMd(cfg.color || '?')}`,
-            `Infill: ${cfg.infill ? Math.round(cfg.infill * 100) + '%' : '?'} · Aantal: ${cfg.quantity || 1}`,
+            ...itemLines,
+            ``,
+            `Totaal: ${totalUnits} stuks · ${totalWeight.toFixed(0)}g · ${totalHours.toFixed(1)}u`,
             ``,
             `💰 *${eur(p.totalIncVat)}* incl BTW`,
             ``,

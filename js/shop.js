@@ -1,7 +1,32 @@
-import { PRODUCTS, findProduct, shippingFor } from './products.js?v=2';
+import { PRODUCTS as STATIC_PRODUCTS, shippingFor } from './products.js?v=2';
 
 const fmtEuro = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
 let activeProduct = null;
+
+// Combined list = static catalog + extras pushed by EtsyManager via Netlify Blobs.
+// Refreshed once on DOMContentLoaded, falls back to static-only on fetch errors.
+const PRODUCTS = [...STATIC_PRODUCTS];
+function findProduct(id) {
+    return PRODUCTS.find(p => p.id === id) || null;
+}
+
+async function loadExtraProducts() {
+    try {
+        const res = await fetch('/.netlify/functions/list-extra-products', { cache: 'no-store' });
+        if (!res.ok) return;
+        const extras = await res.json();
+        if (!Array.isArray(extras) || !extras.length) return;
+        // Dedupe by id — static wins over dynamic with the same id.
+        const known = new Set(PRODUCTS.map(p => p.id));
+        for (const p of extras) {
+            if (!p || !p.id || known.has(p.id)) continue;
+            PRODUCTS.push(p);
+            known.add(p.id);
+        }
+    } catch (e) {
+        console.warn('Extra products fetch failed — using static catalog only:', e);
+    }
+}
 
 function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -159,7 +184,10 @@ async function submitOrder() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    renderGrid();
+    // Fetch dynamic Etsy-synced products in the background and re-render when done.
+    await loadExtraProducts();
     renderGrid();
 
     document.getElementById('mQty').addEventListener('input', updateTotal);
