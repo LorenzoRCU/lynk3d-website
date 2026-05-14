@@ -374,15 +374,17 @@ async function handleFiles(fileList) {
         document.getElementById('dropzoneAdd').style.display = 'flex';
         document.getElementById('viewer').style.display = 'block';
         document.getElementById('viewerInfo').style.display = 'flex';
-        // Activate the most recently added item if nothing active
-        if (!state.activeId && added > 0) {
-            const lastValid = [...state.items].reverse().find(i => i.analysis);
-            if (lastValid) setActiveItem(lastValid.id);
-        }
     }
 
-    render();
+    // Order matters: recalc first (sets item.price), then render (reads it),
+    // then setActiveItem (updates viewer + re-renders highlight).
     recalc();
+    render();
+
+    if (state.items.length > 0 && !state.activeId && added > 0) {
+        const lastValid = [...state.items].reverse().find(i => i.analysis);
+        if (lastValid) setActiveItem(lastValid.id);
+    }
 
     // Reset file input so re-selecting the same file works
     document.getElementById('fileInput').value = '';
@@ -625,9 +627,11 @@ function render() {
     list.innerHTML = state.items.map((item, idx) => {
         const isActive = state.activeId === item.id;
         const isError = !!item.error;
+        const isPending = !item.analysis && !item.error;
+        const isPriceless = !!item.analysis && !item.price;
         const klass = `item-card${isActive ? ' active' : ''}${isError ? ' error' : ''}`;
-        const sizeMb = (item.file.size / 1024 / 1024).toFixed(2);
-        const filename = escapeHtml(item.file.name);
+        const sizeMb = (item.file && item.file.size != null) ? (item.file.size / 1024 / 1024).toFixed(2) : '?';
+        const filename = escapeHtml((item.file && item.file.name) || 'bestand');
 
         if (isError) {
             return `
@@ -636,6 +640,19 @@ function render() {
                         <div>
                             <div class="filename">${filename}</div>
                             <span class="meta">${sizeMb} MB &middot; <span style="color: #9C1C14;">${escapeHtml(item.error)}</span></span>
+                        </div>
+                        <button type="button" class="item-remove" data-action="remove" data-id="${item.id}" aria-label="Verwijder">&times;</button>
+                    </div>
+                </div>`;
+        }
+
+        if (isPending || isPriceless) {
+            return `
+                <div class="${klass}" data-id="${item.id}">
+                    <div class="item-head">
+                        <div>
+                            <div class="filename">${filename}</div>
+                            <span class="meta">${sizeMb} MB &middot; <em>Bezig met verwerken…</em></span>
                         </div>
                         <button type="button" class="item-remove" data-action="remove" data-id="${item.id}" aria-label="Verwijder">&times;</button>
                     </div>
