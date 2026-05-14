@@ -63,7 +63,13 @@
         .viewer-empty { display: flex; align-items: center; justify-content: center; color: var(--gray-mid); font-size: 0.9rem; height: 100%; padding: 24px; text-align: center; }
 
         /* Items list (per file) */
-        .items-list { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+        .items-list-hint {
+            margin-top: 18px; margin-bottom: 8px;
+            font-size: 0.8rem; color: var(--gray-mid); text-align: center;
+            display: none;
+        }
+        .items-list-hint.visible { display: block; }
+        .items-list { display: flex; flex-direction: column; gap: 12px; }
         .item-card {
             background: var(--gray-light);
             border-radius: 12px;
@@ -71,9 +77,29 @@
             border: 2px solid transparent;
             transition: border-color var(--transition), background var(--transition);
             cursor: pointer;
+            position: relative;
         }
-        .item-card.active { border-color: var(--teal); background: var(--teal-bg); }
-        .item-card.error { border-color: #FF3B30; background: rgba(255,59,48,0.06); }
+        .item-card:hover:not(.active) { border-color: rgba(32,67,62,0.25); background: rgba(32,67,62,0.03); }
+        .item-card.active {
+            border-color: var(--teal); background: var(--teal-bg);
+            box-shadow: 0 2px 12px rgba(32,67,62,0.12);
+        }
+        .item-card.error { border-color: #FF3B30; background: rgba(255,59,48,0.06); cursor: default; }
+        .item-card.error:hover { background: rgba(255,59,48,0.06); border-color: #FF3B30; }
+        .item-view-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 0.7rem; font-weight: 600; color: var(--teal);
+            background: rgba(32,67,62,0.1); padding: 3px 8px; border-radius: 10px;
+            margin-bottom: 6px;
+        }
+        .item-view-btn {
+            background: var(--white); border: 1px solid var(--border); color: var(--gray-dark);
+            font-size: 0.75rem; font-weight: 600; cursor: pointer;
+            padding: 6px 10px; border-radius: 7px; display: inline-flex; align-items: center; gap: 4px;
+            transition: all var(--transition);
+        }
+        .item-view-btn:hover { border-color: var(--teal); color: var(--teal); background: var(--teal-bg); }
+        .item-card.active .item-view-btn { display: none; }
         .item-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
         .item-head .filename {
             font-weight: 600; color: var(--teal); font-size: 0.95rem;
@@ -231,6 +257,9 @@
                     </div>
 
                     <div class="warn" id="warn"></div>
+
+                    <!-- Hint above items list (only visible with 2+ files) -->
+                    <div class="items-list-hint" id="itemsListHint">Klik op een bestand hieronder om het in 3D te bekijken</div>
 
                     <!-- Items list (per uploaded file) -->
                     <div class="items-list" id="itemsList"></div>
@@ -392,6 +421,6 @@
     </footer>
 
     <script src="js/main.js"></script>
-    <script type="module" src="js/calculator.js?v=14"></script>
+    <script type="module" src="js/calculator.js?v=15"></script>
 </body>
 </html>

@@ -619,6 +619,10 @@ function recalc() {
 // ---------- Item list rendering ----------
 function render() {
     const list = document.getElementById('itemsList');
+    const hint = document.getElementById('itemsListHint');
+    if (hint) {
+        hint.classList.toggle('visible', state.items.length >= 2);
+    }
     if (state.items.length === 0) {
         list.innerHTML = '';
         return;
@@ -681,14 +685,25 @@ function render() {
             ? `<div class="item-warn">${item.warns.map(escapeHtml).join(' ')}</div>`
             : '';
 
+        const viewBadge = isActive
+            ? `<span class="item-view-badge">👁 Wordt 3D bekeken</span>`
+            : '';
+        const viewBtn = isActive
+            ? ''
+            : `<button type="button" class="item-view-btn" data-action="view" data-id="${item.id}">👁 Bekijk in 3D</button>`;
+
         return `
             <div class="${klass}" data-id="${item.id}" data-action="select">
+                ${viewBadge}
                 <div class="item-head">
                     <div style="flex: 1; min-width: 0;">
                         <div class="filename">${filename}</div>
                         <span class="meta">${metaTxt}${d ? ` &middot; ${fmtNum(d.weightG, 0)} g/stuk` : ''}</span>
                     </div>
-                    <button type="button" class="item-remove" data-action="remove" data-id="${item.id}" aria-label="Verwijder">&times;</button>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        ${viewBtn}
+                        <button type="button" class="item-remove" data-action="remove" data-id="${item.id}" aria-label="Verwijder">&times;</button>
+                    </div>
                 </div>
                 <div class="item-config">
                     <div>
@@ -725,6 +740,12 @@ function bindItemList() {
         if (removeBtn) {
             e.stopPropagation();
             removeItem(removeBtn.getAttribute('data-id'));
+            return;
+        }
+        const viewBtn = e.target.closest('[data-action="view"]');
+        if (viewBtn) {
+            e.stopPropagation();
+            setActiveItem(viewBtn.getAttribute('data-id'));
             return;
         }
         const card = e.target.closest('.item-card');
