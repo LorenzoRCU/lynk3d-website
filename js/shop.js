@@ -35,19 +35,12 @@ function escapeHtml(s) {
 function renderGrid() {
     const grid = document.getElementById('shopGrid');
     grid.innerHTML = PRODUCTS.map(p => {
-        // Etsy-listing producten: toon "Op Etsy" badge + directe link i.p.v. modaal
-        const isEtsy = p.source === 'etsy_listing' || (p.etsy_url && /etsy\.com\/listing/.test(p.etsy_url));
-        const etsyBadge = isEtsy
-            ? `<a class="etsy-badge" href="${escapeHtml(p.etsy_url || '#')}" target="_blank" rel="noopener" title="Bekijk op Etsy">Op Etsy &#8599;</a>`
-            : '';
-        const buyBtn = isEtsy
-            ? `<a class="buy-btn etsy-buy" href="${escapeHtml(p.etsy_url || '#')}" target="_blank" rel="noopener">Bekijk op Etsy</a>`
-            : `<button type="button" class="buy-btn">Bestel</button>`;
+        // Geen Etsy-links meer — alle producten verkopen we via Lynk3D zelf.
+        const buyBtn = `<button type="button" class="buy-btn">Bestel</button>`;
         return `
-        <div class="product-card${isEtsy ? ' product-card--etsy' : ''}" data-id="${p.id}" data-etsy="${isEtsy ? '1' : '0'}">
+        <div class="product-card" data-id="${p.id}">
             <div class="image">
                 <img src="${p.image}" alt="${escapeHtml(p.name)}" loading="lazy">
-                ${etsyBadge}
             </div>
             <div class="body">
                 <h3>${escapeHtml(p.name)}</h3>
@@ -65,19 +58,7 @@ function renderGrid() {
     }).join('');
 
     grid.querySelectorAll('.product-card').forEach(card => {
-        card.addEventListener('click', (ev) => {
-            // Voor Etsy-producten: laat de <a> z'n werk doen, geen modaal
-            if (card.dataset.etsy === '1') {
-                // Als klik op de buy-button → laat default navigatie door
-                // Als elders op de card → ook naar Etsy
-                const p = findProduct(card.dataset.id);
-                if (p && p.etsy_url && !ev.target.closest('a')) {
-                    window.open(p.etsy_url, '_blank', 'noopener');
-                }
-                return;
-            }
-            openModal(card.dataset.id);
-        });
+        card.addEventListener('click', () => openModal(card.dataset.id));
     });
 }
 
@@ -86,8 +67,41 @@ function openModal(productId) {
     if (!p) return;
     activeProduct = p;
 
-    document.getElementById('mImage').src = p.image;
-    document.getElementById('mImage').alt = p.name;
+    const mainImg = document.getElementById('mImage');
+    mainImg.src = p.image;
+    mainImg.alt = p.name;
+
+    // Thumbnail carousel (alle foto's) — vul container of maak 'm aan
+    const allImages = Array.isArray(p.images) && p.images.length ? p.images : [p.image];
+    let thumbs = document.getElementById('mThumbs');
+    if (!thumbs && mainImg && mainImg.parentNode) {
+        thumbs = document.createElement('div');
+        thumbs.id = 'mThumbs';
+        thumbs.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;';
+        mainImg.parentNode.insertBefore(thumbs, mainImg.nextSibling);
+    }
+    if (thumbs) {
+        if (allImages.length <= 1) {
+            thumbs.style.display = 'none';
+            thumbs.innerHTML = '';
+        } else {
+            thumbs.style.display = 'flex';
+            thumbs.innerHTML = allImages.map((url, idx) => `
+                <img src="${url}" alt="${escapeHtml(p.name)} foto ${idx + 1}"
+                     loading="lazy"
+                     style="width:54px;height:54px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${url === p.image ? 'var(--teal,#20433E)' : 'transparent'};"
+                     data-img-url="${url}">
+            `).join('');
+            thumbs.querySelectorAll('img').forEach(t => {
+                t.addEventListener('click', () => {
+                    mainImg.src = t.dataset.imgUrl;
+                    thumbs.querySelectorAll('img').forEach(x => x.style.borderColor = 'transparent');
+                    t.style.borderColor = 'var(--teal,#20433E)';
+                });
+            });
+        }
+    }
+
     document.getElementById('mName').textContent = p.name;
     document.getElementById('mSubtitle').textContent = p.subtitle;
     document.getElementById('mDesc').textContent = p.description;
