@@ -17,12 +17,13 @@ async function loadExtraProducts() {
         const extras = await res.json();
         if (!Array.isArray(extras) || !extras.length) return;
 
-        // ALLEEN Etsy-listings — geen drafts of static items.
+        // Etsy-listings + lynk-only (handmatig via 'Upload naar LYNKSHOP').
+        // Geen oude drafts of static items.
         const seenIds = new Set();
-        const seenEtsy = new Set();  // dedupe op etsy_listing_id ook
+        const seenEtsy = new Set();
         for (const p of extras) {
             if (!p || !p.id) continue;
-            if (p.source !== 'etsy_listing') continue;
+            if (p.source !== 'etsy_listing' && p.source !== 'lynk_only') continue;
             if (seenIds.has(p.id)) continue;
             if (p.etsy_listing_id && seenEtsy.has(p.etsy_listing_id)) continue;
             seenIds.add(p.id);
