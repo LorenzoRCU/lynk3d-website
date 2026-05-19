@@ -40,6 +40,41 @@ export default async (req) => {
 
     const url = new URL(req.url);
     const mode = (url.searchParams.get('mode') || 'merge').toLowerCase();
+    const deleteIds = (url.searchParams.get('delete') || '').split(',').map(s => s.trim()).filter(Boolean);
+
+    // DELETE flow: ?delete=id1,id2 verwijdert die products uit products.json + hun blobs.
+    if (deleteIds.length) {
+        const store = getStore({ name: 'lynk3d-products', consistency: 'strong' });
+        const imageStore = getStore({ name: 'lynk3d-product-images' });
+        let existing = [];
+        try {
+            const ed = await store.get('products.json', { type: 'json' });
+            existing = Array.isArray(ed) ? ed : (ed && Array.isArray(ed.products) ? ed.products : []);
+        } catch (e) {
+            console.warn('Could not load products.json:', e);
+        }
+        const before = existing.length;
+        const kept = existing.filter(p => !deleteIds.includes(p.id));
+        await store.setJSON('products.json', kept);
+        let imagesDeleted = 0;
+        for (const id of deleteIds) {
+            try {
+                const { blobs } = await imageStore.list({ prefix: `${id}/` });
+                for (const b of (blobs || [])) {
+                    await imageStore.delete(b.key);
+                    imagesDeleted++;
+                }
+            } catch (e) {
+                console.warn(`Delete blobs voor ${id} faalde:`, e);
+            }
+        }
+        return new Response(JSON.stringify({
+            deleted_ids: deleteIds,
+            products_before: before,
+            products_after: kept.length,
+            images_deleted: imagesDeleted,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
 
     let products;
     try {
@@ -78,10 +113,28 @@ export default async (req) => {
     // Persist images into lynk3d-product-images blob store, replace product.image
     let imagesStored = 0;
     let imageErrors = 0;
+    let imagesDeleted = 0;
     try {
         const imageStore = getStore({ name: 'lynk3d-product-images' });
         for (const p of incoming) {
             if (!p.images.length) continue;
+
+            // STAP 1: Wis bestaande images voor dit product (uit eerdere syncs / bug-runs)
+            // zodat we beginnen met een schone leien voor de nieuwe set.
+            try {
+                const { blobs } = await imageStore.list({ prefix: `${p.id}/` });
+                for (const b of (blobs || [])) {
+                    try {
+                        await imageStore.delete(b.key);
+                        imagesDeleted++;
+                    } catch (e) {
+                        console.warn(`Delete oude image faalde ${b.key}:`, e);
+                    }
+                }
+            } catch (e) {
+                console.warn(`Kon oude images niet listen voor ${p.id}:`, e);
+            }
+
             let firstUrl = null;
             for (const img of p.images) {
                 if (!img || typeof img !== 'object') continue;
