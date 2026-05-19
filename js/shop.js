@@ -1,28 +1,13 @@
-import { PRODUCTS as STATIC_PRODUCTS, shippingFor } from './products.js?v=2';
+import { shippingFor } from './products.js?v=2';
 
 const fmtEuro = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
 let activeProduct = null;
 
-// Combined list = static catalog + extras pushed by EtsyManager via Netlify Blobs.
-// Refreshed once on DOMContentLoaded, falls back to static-only on fetch errors.
-const PRODUCTS = [...STATIC_PRODUCTS];
+// SHOP TOONT ALLEEN ETSY-LISTINGS — geen static catalog meer, geen drafts.
+// Bron: list-extra-products Netlify function, filter op source='etsy_listing'.
+const PRODUCTS = [];
 function findProduct(id) {
     return PRODUCTS.find(p => p.id === id) || null;
-}
-
-// Genereer een fingerprint uit een naam: lowercase, alleen letters/cijfers,
-// eerste 2-3 sleutelwoorden. Gebruikt voor smart dedup tussen static (EN) en
-// dynamic (NL) namen — bv "Mario Mystery Box Toilet Holder" en
-// "Mario Mystery Box-toiletrolhouder" matchen op 'mario mystery box'.
-function nameFingerprint(name) {
-    const STOP = new Set(['de','het','een','en','met','voor','van','op','in','aan',
-        'the','a','an','and','with','for','of','to','in','on']);
-    const tokens = String(name || '').toLowerCase()
-        .replace(/[^a-z0-9\s]+/g, ' ')
-        .split(/\s+/)
-        .filter(t => t.length >= 3 && !STOP.has(t));
-    // Pak de eerste 2 lange tokens als fingerprint
-    return tokens.slice(0, 2).join(' ');
 }
 
 async function loadExtraProducts() {
@@ -32,31 +17,17 @@ async function loadExtraProducts() {
         const extras = await res.json();
         if (!Array.isArray(extras) || !extras.length) return;
 
-        // Build dedup-maps: bestaande static products
-        const knownIds = new Set(PRODUCTS.map(p => p.id));
-        const knownFingerprints = new Map();
-        for (const p of PRODUCTS) {
-            const fp = nameFingerprint(p.name);
-            if (fp) knownFingerprints.set(fp, p);
-        }
-
+        // ALLEEN Etsy-listings — geen drafts of static items.
+        const seenIds = new Set();
+        const seenEtsy = new Set();  // dedupe op etsy_listing_id ook
         for (const p of extras) {
-            if (!p || !p.id || knownIds.has(p.id)) continue;
-            const fp = nameFingerprint(p.name);
-            const dup = fp ? knownFingerprints.get(fp) : null;
-            if (dup) {
-                // Dynamic versie heeft betere foto's (uit Etsy) — vervang static
-                const idx = PRODUCTS.indexOf(dup);
-                if (idx >= 0) {
-                    PRODUCTS[idx] = p;
-                    knownIds.delete(dup.id);
-                    knownIds.add(p.id);
-                }
-                continue;
-            }
+            if (!p || !p.id) continue;
+            if (p.source !== 'etsy_listing') continue;
+            if (seenIds.has(p.id)) continue;
+            if (p.etsy_listing_id && seenEtsy.has(p.etsy_listing_id)) continue;
+            seenIds.add(p.id);
+            if (p.etsy_listing_id) seenEtsy.add(p.etsy_listing_id);
             PRODUCTS.push(p);
-            knownIds.add(p.id);
-            if (fp) knownFingerprints.set(fp, p);
         }
     } catch (e) {
         console.warn('Extra products fetch failed — using static catalog only:', e);
